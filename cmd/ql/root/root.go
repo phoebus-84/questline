@@ -10,9 +10,9 @@ import (
 const Version = "0.1.0"
 
 var rootCmd = &cobra.Command{
-	Use:   "ql",
-	Short: "Questline (MVP) — local-first RPG task manager",
-	Long:  "Questline is a local-first CLI/TUI task manager with RPG progression mechanics.",
+	Use:           "ql",
+	Short:         "Questline (MVP) — local-first RPG task manager",
+	Long:          "Questline is a local-first CLI/TUI task manager with RPG progression mechanics.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
