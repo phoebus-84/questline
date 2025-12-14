@@ -1,9 +1,11 @@
 package root
 
 import (
-	"errors"
+	"context"
 
 	"github.com/spf13/cobra"
+
+	"questline/internal/tui"
 )
 
 func newBoardCmd() *cobra.Command {
@@ -11,7 +13,14 @@ func newBoardCmd() *cobra.Command {
 		Use:   "board",
 		Short: "Open the TUI dashboard",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errors.New("not implemented (bootstrap)")
+			ctx := context.Background()
+			svc, cleanup, err := openService(ctx)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			return tui.RunBoard(ctx, svc, cmd.OutOrStdout())
 		},
 	}
 
