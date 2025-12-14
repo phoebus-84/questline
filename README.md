@@ -1,6 +1,18 @@
-# Questline (MVP)
+# Questline
 
-Questline is a local-first RPG task manager built in Go. It stores state in a local SQLite DB and provides a CLI (and a minimal TUI) for creating tasks, completing them for XP, and unlocking features as you level up.
+Questline is a local-first RPG task manager built in Go.
+
+You add quests, complete them for XP, and unlock mechanics as your character grows — all stored in a tiny local SQLite file.
+
+**Vibe:** sleek and playful, still serious about ergonomics.
+
+## Features
+
+- Local-first SQLite DB (single file)
+- RPG progression: XP, levels, gates/unlocks
+- Tasks, projects, subtasks, and recurring habits
+- Blueprints (unlockable templates)
+- CLI + Bubbletea TUI dashboard
 
 ## Requirements
 
@@ -18,6 +30,12 @@ go build ./cmd/ql
 # Or install to your GOPATH/bin
 go install ./cmd/ql
 ```
+
+## Docs
+
+- Usage recipes: [docs/USAGE.md](docs/USAGE.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- License: [LICENSE](LICENSE)
 
 ## Quickstart (5 steps)
 
