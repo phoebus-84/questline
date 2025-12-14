@@ -7,10 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"questline/internal/engine"
 	"questline/internal/storage"
+	"questline/internal/ui"
 )
 
 type boardModel struct {
@@ -26,9 +31,26 @@ type boardModel struct {
 	expanded map[int64]bool
 	selected int
 
+	help    help.Model
+	keys    keyMap
+	spinner spinner.Model
+
 	lastLog string
 	loading bool
 	err     error
+}
+
+type keyMap struct {
+	Up       key.Binding
+	Down     key.Binding
+	Toggle   key.Binding
+	Complete key.Binding
+	Refresh  key.Binding
+	Quit     key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Toggle, k.Complete, k.Refresh, k.Quit}
 }
 
 type loadedMsg struct {
@@ -44,17 +66,30 @@ type completedMsg struct {
 }
 
 func newBoardModel(ctx context.Context, svc *engine.Service) boardModel {
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
+	sp.Style = ui.Muted
+
 	return boardModel{
 		ctx:      ctx,
 		svc:      svc,
 		expanded: map[int64]bool{},
 		loading:  true,
 		lastLog:  "Loaded.",
+		help:     help.New(),
+		spinner:  sp,
+		keys: keyMap{
+			Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "move")),
+			Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "move")),
+			Toggle:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand")),
+			Complete: key.NewBinding(key.WithKeys("c", "space"), key.WithHelp("c/space", "complete")),
+			Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+			Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		},
 	}
 }
 
 func (m boardModel) Init() tea.Cmd {
-	return m.loadCmd()
+	return tea.Batch(m.loadCmd(), m.spinner.Tick)
 }
 
 func (m boardModel) loadCmd() tea.Cmd {
@@ -84,6 +119,10 @@ func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case loadedMsg:
 		m.loading = false
 		m.err = msg.err
@@ -228,100 +267,98 @@ func (m boardModel) questLines() []questLine {
 
 func (m boardModel) View() string {
 	if m.err != nil {
-		return "Error: " + m.err.Error() + "\n\nPress q to quit.\n"
+		return ui.Bad.Render(ui.IconError+" Error") + ": " + m.err.Error() + "\n\nPress q to quit.\n"
 	}
 
 	header := m.renderHeader()
-	sidebar := m.renderSidebar()
-	main := m.renderMain()
 	footer := m.renderFooter()
 
-	// Simple 2-column layout.
-	leftW := 26
+	leftW := 30
 	if m.width > 0 {
-		maxLeft := m.width / 2
+		maxLeft := (m.width - 2) / 2
 		if maxLeft < leftW {
 			leftW = maxLeft
 		}
-		if leftW < 18 {
-			leftW = 18
+		if leftW < 22 {
+			leftW = 22
 		}
 	}
 
-	linesLeft := strings.Split(sidebar, "\n")
-	linesRight := strings.Split(main, "\n")
-	max := len(linesLeft)
-	if len(linesRight) > max {
-		max = len(linesRight)
+	rightW := 0
+	if m.width > 0 {
+		rightW = m.width - leftW - 2
+		if rightW < 20 {
+			rightW = 20
+		}
 	}
 
-	var body strings.Builder
-	for i := 0; i < max; i++ {
-		l := ""
-		r := ""
-		if i < len(linesLeft) {
-			l = linesLeft[i]
-		}
-		if i < len(linesRight) {
-			r = linesRight[i]
-		}
-		body.WriteString(padRight(l, leftW))
-		body.WriteString("  ")
-		body.WriteString(r)
-		body.WriteString("\n")
+	left := ui.Panel.Width(leftW).Render(m.renderSidebar())
+	right := ui.Panel.Render(m.renderMain())
+	if rightW > 0 {
+		right = ui.Panel.Width(rightW).Render(m.renderMain())
 	}
 
-	return header + "\n" + body.String() + footer
+	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return header + "\n" + body + "\n" + footer
 }
 
 func (m boardModel) renderHeader() string {
 	if m.player == nil {
-		return "Questline — loading…"
+		return ui.Heading(ui.IconQuest, "Questline") + " " + ui.Muted.Render(m.spinner.View()+" loading…")
 	}
 	lvl := engine.LevelForTotalXP(m.player.XPTotal)
-	bar := progressBar(
+	bar := progressBarStyled(
 		m.player.XPTotal-engine.XPRequiredForLevel(lvl),
 		engine.XPRequiredForLevel(lvl+1)-engine.XPRequiredForLevel(lvl),
 		30,
 	)
-	return fmt.Sprintf("Questline | Player: %s | Level %d | XP %d %s", m.player.Key, lvl, m.player.XPTotal, bar)
+	left := ui.Heading(ui.IconQuest, "Questline")
+	right := fmt.Sprintf("%s %s  %s %s  %s %d %s",
+		ui.Muted.Render("Player"), ui.Key.Render(m.player.Key),
+		ui.Muted.Render("Level"), ui.Key.Render(fmt.Sprintf("%d", lvl)),
+		ui.Muted.Render("XP"), m.player.XPTotal, bar,
+	)
+	if m.width > 0 {
+		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap > 1 {
+			return left + strings.Repeat(" ", gap) + right
+		}
+	}
+	return left + "  " + right
 }
 
 func (m boardModel) renderSidebar() string {
 	if m.player == nil {
-		return "Stats\n\nLoading…"
+		return ui.PanelTitle.Render("📊 Stats") + "\n\n" + ui.Muted.Render(m.spinner.View()+" loading…")
 	}
-	lines := []string{"Attributes"}
-	lines = append(lines, renderAttr("STR", m.player.XPStr))
-	lines = append(lines, renderAttr("INT", m.player.XPInt))
-	lines = append(lines, renderAttr("ART", m.player.XPArt))
-	lines = append(lines, renderAttr("WIS", m.player.XPWis))
+	lines := []string{ui.PanelTitle.Render("📊 Attributes")}
+	lines = append(lines, renderAttr("💪 STR", m.player.XPStr))
+	lines = append(lines, renderAttr("🧠 INT", m.player.XPInt))
+	lines = append(lines, renderAttr("🎨 ART", m.player.XPArt))
+	lines = append(lines, renderAttr("🧘 WIS", m.player.XPWis))
 	lines = append(lines, "")
-	lines = append(lines, "Keys")
-	lines = append(lines, "- ↑/↓ or j/k: move")
-	lines = append(lines, "- enter: expand/collapse")
-	lines = append(lines, "- c/space: complete")
-	lines = append(lines, "- r: refresh")
-	lines = append(lines, "- q: quit")
+	lines = append(lines, ui.PanelTitle.Render("⌨️  Keys"))
+	lines = append(lines, ui.Muted.Render(m.help.ShortHelpView(m.keys.ShortHelp())))
 	return strings.Join(lines, "\n")
 }
 
 func (m boardModel) renderMain() string {
 	if m.loading {
-		return "Loading…"
+		return ui.PanelTitle.Render("✨ Loading") + "\n\n" + ui.Muted.Render(m.spinner.View()+" fetching quests…")
 	}
 	focus := m.focusTasks(3)
 	var out []string
-	out = append(out, "Focus")
+	out = append(out, ui.PanelTitle.Render("🎯 Focus"))
 	if len(focus) == 0 {
-		out = append(out, "(no pending leaf tasks)")
+		out = append(out, ui.Muted.Render("(no pending leaf tasks)"))
 	} else {
 		for _, t := range focus {
-			out = append(out, fmt.Sprintf("- %d %s (xp=%d)", t.ID, t.Title, t.XPValue))
+			icon := ui.KindIcon(t.IsProject, t.IsHabit)
+			out = append(out, fmt.Sprintf("%s #%d %s %s", icon, t.ID, t.Title, ui.Muted.Render(fmt.Sprintf("(+%d XP)", t.XPValue))))
 		}
 	}
 	out = append(out, "")
-	out = append(out, "Quest Log")
+	out = append(out, ui.PanelTitle.Render("🗺️ Quest Log"))
 
 	lines := m.questLines()
 	if len(lines) == 0 {
@@ -329,17 +366,8 @@ func (m boardModel) renderMain() string {
 		return strings.Join(out, "\n")
 	}
 	for i, ql := range lines {
-		cursor := "  "
-		if i == m.selected {
-			cursor = "> "
-		}
 		indent := strings.Repeat("  ", ql.depth)
-		icon := ""
-		if ql.isProject {
-			icon = "[P] "
-		} else if ql.isHabit {
-			icon = "[H] "
-		}
+		kind := ui.KindIcon(ql.isProject, ql.isHabit)
 		fold := "  "
 		if ql.hasChildren {
 			if ql.expanded {
@@ -348,13 +376,22 @@ func (m boardModel) renderMain() string {
 				fold = "▸ "
 			}
 		}
-		out = append(out, fmt.Sprintf("%s%s%s%s%s (status=%s)", cursor, indent, fold, icon, ql.title, ql.status))
+		status := ui.StatusText(ql.status)
+		row := fmt.Sprintf("%s%s%s %s %s", indent, fold, kind, ql.title, ui.Muted.Render("("+status+")"))
+		if i == m.selected {
+			row = ui.SelectedRow.Render(row)
+		}
+		out = append(out, row)
 	}
 	return strings.Join(out, "\n")
 }
 
 func (m boardModel) renderFooter() string {
-	return "\n" + m.lastLog
+	line := ui.Muted.Render(m.lastLog)
+	if m.loading {
+		line = ui.Muted.Render(m.spinner.View()+" ") + line
+	}
+	return line
 }
 
 func (m boardModel) focusTasks(n int) []storage.Task {
@@ -402,11 +439,11 @@ func renderAttr(label string, xp int) string {
 	lvl := engine.AttributeLevelForXP(xp)
 	cur := engine.XPRequiredForLevel(lvl)
 	next := engine.XPRequiredForLevel(lvl + 1)
-	bar := progressBar(xp-cur, next-cur, 14)
-	return fmt.Sprintf("- %s L%d %s", label, lvl, bar)
+	bar := progressBarStyled(xp-cur, next-cur, 14)
+	return fmt.Sprintf("%s %s %s", label, ui.Muted.Render(fmt.Sprintf("L%d", lvl)), bar)
 }
 
-func progressBar(value int, total int, width int) string {
+func progressBarStyled(value int, total int, width int) string {
 	if total <= 0 {
 		total = 1
 	}
@@ -424,18 +461,9 @@ func progressBar(value int, total int, width int) string {
 	if filled > width {
 		filled = width
 	}
-	return "[" + strings.Repeat("#", filled) + strings.Repeat("-", width-filled) + "]"
-}
-
-func padRight(s string, width int) string {
-	if width <= 0 {
-		return s
-	}
-	r := []rune(s)
-	if len(r) >= width {
-		return string(r[:width])
-	}
-	return s + strings.Repeat(" ", width-len(r))
+	fill := strings.Repeat("█", filled)
+	empty := strings.Repeat("░", width-filled)
+	return ui.Muted.Render("[") + ui.Good.Render(fill) + ui.Dim.Render(empty) + ui.Muted.Render("]")
 }
 
 func findTask(tasks []storage.Task, id int64) *storage.Task {

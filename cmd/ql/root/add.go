@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"questline/internal/engine"
+	"questline/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -50,7 +51,7 @@ func newAddCmd() *cobra.Command {
 					return err
 				}
 				created, _ := svc.TaskRepo().Get(ctx, res.TaskID)
-				fmt.Fprintf(cmd.OutOrStdout(), "Created project %d: %s (status=%s)\n", res.TaskID, created.Title, created.Status)
+				fmt.Fprintln(cmd.OutOrStdout(), ui.Good.Render(ui.IconBox+" Created project")+" "+fmt.Sprintf("#%d %s", res.TaskID, created.Title)+" "+ui.Muted.Render("("+ui.StatusText(created.Status)+")"))
 				return nil
 			}
 
@@ -84,19 +85,18 @@ func newAddCmd() *cobra.Command {
 				return err
 			}
 
-			kind := "task"
+			icon := ui.KindIcon(created.IsProject, created.IsHabit)
+			label := "Created task"
 			if created.IsHabit {
-				kind = "habit"
-			}
-			if created.IsProject {
-				kind = "project"
+				label = "Created habit"
 			}
 
+			line := ui.Good.Render(ui.IconPlus+" "+label) + " " + fmt.Sprintf("%s #%d %s", icon, res.TaskID, created.Title)
+			line += " " + ui.Muted.Render(fmt.Sprintf("(+%d XP)", created.XPValue))
 			if res.ProjectActivated {
-				fmt.Fprintf(cmd.OutOrStdout(), "Created %s %d: %s (xp=%d) [project activated]\n", kind, res.TaskID, created.Title, created.XPValue)
-				return nil
+				line += " " + ui.Gold.Render("⚡ project activated")
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created %s %d: %s (xp=%d)\n", kind, res.TaskID, created.Title, created.XPValue)
+			fmt.Fprintln(cmd.OutOrStdout(), line)
 			return nil
 		},
 	}

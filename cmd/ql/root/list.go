@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"questline/internal/ui"
 )
 
 func newListCmd() *cobra.Command {
@@ -20,9 +22,15 @@ func newListCmd() *cobra.Command {
 			}
 			defer cleanup()
 
+			fmt.Fprintln(cmd.OutOrStdout(), ui.Heading(ui.IconQuest, "Quest Log"))
+
 			tasks, err := svc.TaskRepo().ListAll(ctx)
 			if err != nil {
 				return err
+			}
+			if len(tasks) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), ui.Muted.Render("(empty — add your first quest with: ql add \"My first task\")"))
+				return nil
 			}
 			children := map[int64][]int64{}
 			roots := []int64{}
@@ -47,13 +55,8 @@ func newListCmd() *cobra.Command {
 					nextPrefix = prefix + "   "
 				}
 
-				kind := ""
-				if t.IsProject {
-					kind = "[P] "
-				} else if t.IsHabit {
-					kind = "[H] "
-				}
-				line := fmt.Sprintf("%s%s%d %s%s (status=%s)", prefix, branch, t.ID, kind, t.Title, t.Status)
+				icon := ui.KindIcon(t.IsProject, t.IsHabit)
+				line := fmt.Sprintf("%s%s%s #%d %s %s", prefix, branch, icon, t.ID, t.Title, ui.Muted.Render("("+ui.StatusText(t.Status)+")"))
 				fmt.Fprintln(cmd.OutOrStdout(), strings.TrimSpace(line))
 
 				kids := children[id]
@@ -65,13 +68,8 @@ func newListCmd() *cobra.Command {
 			for i := range roots {
 				// Render roots without the leading branch so the tree is stable.
 				rootTask := tasks[byID[roots[i]]]
-				kind := ""
-				if rootTask.IsProject {
-					kind = "[P] "
-				} else if rootTask.IsHabit {
-					kind = "[H] "
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%d %s%s (status=%s)\n", rootTask.ID, kind, rootTask.Title, rootTask.Status)
+				icon := ui.KindIcon(rootTask.IsProject, rootTask.IsHabit)
+				fmt.Fprintf(cmd.OutOrStdout(), "%s #%d %s %s\n", icon, rootTask.ID, rootTask.Title, ui.Muted.Render("("+ui.StatusText(rootTask.Status)+")"))
 				kids := children[rootTask.ID]
 				for j := range kids {
 					render(kids[j], "", j == len(kids)-1)

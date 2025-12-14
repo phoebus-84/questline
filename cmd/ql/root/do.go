@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+
+	"questline/internal/ui"
 )
 
 func newDoCmd() *cobra.Command {
@@ -31,19 +33,25 @@ func newDoCmd() *cobra.Command {
 			defer cleanup()
 
 			id, _ := strconv.ParseInt(args[0], 10, 64)
+			before, _ := svc.TaskRepo().Get(ctx, id)
 			res, err := svc.CompleteTask(ctx, id)
 			if err != nil {
 				return err
 			}
 
-			msg := fmt.Sprintf("Completed %d: +%d XP (level %d → %d)", res.TaskID, res.XPAwarded, res.LevelBefore, res.LevelAfter)
+			name := fmt.Sprintf("#%d", res.TaskID)
+			if before != nil {
+				name = fmt.Sprintf("%s #%d %s", ui.KindIcon(before.IsProject, before.IsHabit), res.TaskID, before.Title)
+			}
+			line := fmt.Sprintf("%s %s %s", ui.Good.Render(ui.IconDone+" Completed"), name, ui.Muted.Render(fmt.Sprintf("(+%d XP)", res.XPAwarded)))
+			fmt.Fprintln(cmd.OutOrStdout(), line)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", ui.LabelValue("Level", fmt.Sprintf("%d → %d", res.LevelBefore, res.LevelAfter)))
 			if res.ProjectBonus {
-				msg += fmt.Sprintf(" [project bonus, volume=%d]", res.ProjectVolume)
+				fmt.Fprintln(cmd.OutOrStdout(), ui.Gold.Render(ui.IconTrophy+" Project bonus")+" "+ui.Muted.Render(fmt.Sprintf("(volume=%d)", res.ProjectVolume)))
 			}
 			if res.LevelUp {
-				msg += " [LEVEL UP]"
+				fmt.Fprintln(cmd.OutOrStdout(), ui.Gold.Render(ui.IconBolt+" "+ui.BadgeLevelUp))
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), msg)
 			return nil
 		},
 	}

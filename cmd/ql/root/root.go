@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+
+	"questline/internal/ui"
 )
 
 const Version = "0.1.0"
@@ -31,7 +33,7 @@ func Execute() {
 	)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintln(os.Stderr, ui.Bad.Render(ui.IconError+" "+err.Error()))
 		os.Exit(1)
 	}
 }

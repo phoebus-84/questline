@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"questline/internal/engine"
-	"questline/internal/storage"
+	"questline/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -24,23 +23,17 @@ func newAcceptCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			code := args[0]
-
-			path, err := storage.ResolveDBPath()
+			svc, cleanup, err := openService(ctx)
 			if err != nil {
 				return err
 			}
-			db, err := storage.Open(ctx, path)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
+			defer cleanup()
 
-			svc := engine.NewService(db)
 			res, err := svc.AcceptBlueprint(ctx, code)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Accepted %s → created task %d\n", code, res.TaskID)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s %s → created #%d\n", ui.Good.Render(ui.IconScroll+" Accepted"), ui.Muted.Render(code), res.TaskID)
 			return nil
 		},
 	}

@@ -10,13 +10,39 @@ Questline is a local-first RPG task manager built in Go. It stores state in a lo
 
 ```bash
 # Run from source
-go run ./cmd/ql -- --help
+go run ./cmd/ql --help
 
 # Build a binary
 go build ./cmd/ql
 
 # Or install to your GOPATH/bin
-go install ./cmd/ql@latest
+go install ./cmd/ql
+```
+
+## Quickstart (5 steps)
+
+```bash
+# 1) Build a local binary
+go build -o ql ./cmd/ql
+
+# 2) Check your status (creates the DB on first run)
+./ql status
+
+# 3) Add your first quest
+./ql add "Buy groceries" --diff 2 --attr wis
+
+# 4) View your quest log
+./ql list
+
+# 5) Complete a quest for XP
+./ql do 1
+```
+
+Optional:
+
+```bash
+# Open the TUI dashboard
+./ql board
 ```
 
 ## Database Location
@@ -71,6 +97,73 @@ Notes:
 - `--diff` is 1–5 (trivial → epic).
 - Attributes: `str|int|wis|art`.
 
+## Sample outputs
+
+These examples show the *shape* of the output (colors may vary by terminal).
+
+### `ql status`
+
+```text
+✨ Player Status
+Level: 0
+Total XP: 0 (next at 500, 500 to go)
+
+📊 Attributes
+- 💪 STR: lvl 0 (xp 0)
+- 🧠 INT: lvl 0 (xp 0)
+- 🎨 ART: lvl 0 (xp 0)
+- 🧘 WIS: lvl 0 (xp 0)
+
+🔓 Gates
+- Max active tasks: 3 (currently 0)
+- Subtasks: locked
+- Habits: locked
+- Projects: locked
+
+🔒 Blueprints (locked):
+- art_critic
+- art_reader
+- str_starter
+```
+
+### `ql add "..."`
+
+```text
+➕ Created task 🗺️ #1 Buy groceries (+100 XP)
+```
+
+### `ql list`
+
+```text
+🗺️ Quest Log
+🗺️ #1 Buy groceries (pending)
+```
+
+### `ql do <id>`
+
+```text
+✅ Completed 🗺️ #1 Buy groceries (+100 XP)
+Level: 0 → 0
+```
+
+### `ql accept <blueprint_id>`
+
+If the blueprint is still locked:
+
+```text
+🧨 blueprint str_starter is not available (status=locked)
+```
+
+Once you reach the required gate (e.g. habits unlock at level 5):
+
+```text
+📜 Accepted str_starter → created #8
+```
+
+### `ql board`
+
+`ql board` opens an interactive dashboard (TUI). It doesn’t print a static report; use the keymap below.
+
 ## TUI (`ql board`)
 
 The TUI is a minimal Bubbletea dashboard:
@@ -89,7 +182,3 @@ bd update <id> --status in_progress --json
 bd close <id> --reason "Done" --json
 bd sync
 ```
-
-## Legacy Python Placeholder
-
-There is an older Python placeholder app in `src/` which is not used by the Questline Go implementation.
