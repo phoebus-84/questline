@@ -44,11 +44,79 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 	if task.Status == "done" {
 		return nil, fmt.Errorf("task %d is already done", id)
 	}
-	if task.IsHabit {
-		return nil, fmt.Errorf("habit completion not implemented yet")
-	}
 
 	now := time.Now().UTC()
+
+	if task.IsHabit {
+		children, err := s.tasks.ListChildren(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if len(children) > 0 {
+			return nil, fmt.Errorf("habit %d must be a leaf", id)
+		}
+		if task.HabitInterval == nil {
+			return nil, fmt.Errorf("habit %d is missing interval", id)
+		}
+		interval, err := ParseHabitInterval(*task.HabitInterval)
+		if err != nil {
+			return nil, err
+		}
+
+		// Diminishing returns: 6th+ completion within 7 days at same difficulty awards 50% XP.
+		since := now.Add(-7 * 24 * time.Hour)
+		recentSameDifficulty, err := s.completions.CountSinceWithDifficulty(ctx, id, since, task.Difficulty)
+		if err != nil {
+			return nil, err
+		}
+		xp := task.XPValue
+		if recentSameDifficulty >= 5 {
+			xp = int(math.Round(float64(xp) * 0.50))
+		}
+		if xp < 1 {
+			xp = 1
+		}
+
+		attr := parseStoredAttribute(task.Attribute)
+		nextDue, err := NextDueDate(now, interval)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := s.tasks.UpdateHabitAfterCompletion(ctx, id, now, nextDue); err != nil {
+			return nil, err
+		}
+
+		p.XPTotal += xp
+		switch attr {
+		case AttributeSTR:
+			p.XPStr += xp
+		case AttributeINT:
+			p.XPInt += xp
+		case AttributeART:
+			p.XPArt += xp
+		case AttributeWIS:
+			fallthrough
+		default:
+			p.XPWis += xp
+		}
+		p.Level = LevelForTotalXP(p.XPTotal)
+		if err := s.players.Update(ctx, p); err != nil {
+			return nil, err
+		}
+
+		if _, err := s.completions.Insert(ctx, id, now, task.Difficulty, xp); err != nil {
+			return nil, err
+		}
+
+		return &CompleteResult{
+			TaskID:      id,
+			XPAwarded:   xp,
+			LevelBefore: levelBefore,
+			LevelAfter:  p.Level,
+			LevelUp:     p.Level > levelBefore,
+		}, nil
+	}
 
 	if task.IsProject {
 		if task.Status == "planning" {
@@ -173,8 +241,7 @@ func (s *Service) projectVolumeAndUndone(ctx context.Context, projectID int64) (
 				continue
 			}
 			if c.IsHabit {
-				// Habit completion rules are separate; treat as unfinished for now.
-				hasUndone = true
+				// Habits are recurring; they do not block project completion.
 				continue
 			}
 			volume += c.XPValue

@@ -43,6 +43,19 @@ func (r *CompletionRepo) CountSince(ctx context.Context, taskID int64, since tim
 	return n, nil
 }
 
+func (r *CompletionRepo) CountSinceWithDifficulty(ctx context.Context, taskID int64, since time.Time, difficulty int) (int, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM task_completions
+		WHERE task_id = ? AND completed_at >= ? AND difficulty = ?
+	`, taskID, since, difficulty)
+	var n int
+	if err := row.Scan(&n); err != nil {
+		return 0, fmt.Errorf("completion count by difficulty: %w", err)
+	}
+	return n, nil
+}
+
 func (r *CompletionRepo) Last(ctx context.Context, taskID int64) (*TaskCompletion, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, task_id, completed_at, difficulty, xp_awarded

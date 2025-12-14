@@ -120,6 +120,26 @@ func (r *TaskRepo) MarkDone(ctx context.Context, id int64, completedAt time.Time
 	return nil
 }
 
+func (r *TaskRepo) UpdateHabitAfterCompletion(ctx context.Context, id int64, completedAt time.Time, nextDueDate time.Time) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE tasks
+		SET status = 'pending', completed_at = ?, due_date = ?
+		WHERE id = ?
+	`, completedAt, nextDueDate, id)
+	if err != nil {
+		return fmt.Errorf("habit update after completion: %w", err)
+	}
+	return nil
+}
+
+func (r *TaskRepo) UpdateDifficultyAndXP(ctx context.Context, id int64, difficulty int, xpValue int) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET difficulty = ?, xp_value = ? WHERE id = ?`, difficulty, xpValue, id)
+	if err != nil {
+		return fmt.Errorf("task update difficulty/xp: %w", err)
+	}
+	return nil
+}
+
 func (r *TaskRepo) UpdateStatus(ctx context.Context, id int64, status string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = ? WHERE id = ?`, status, id)
 	if err != nil {

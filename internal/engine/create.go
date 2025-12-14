@@ -13,6 +13,7 @@ type CreateTaskInput struct {
 	Attribute  Attribute
 	ParentID   *int64
 	IsHabit    bool
+	HabitInterval HabitInterval
 }
 
 type CreateProjectInput struct {
@@ -90,6 +91,9 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		if err := CanCreateHabit(p.Level); err != nil {
 			return nil, err
 		}
+		if !in.HabitInterval.IsValid() {
+			return nil, fmt.Errorf("habit interval is required (daily/weekly)")
+		}
 	}
 
 	// Parent validation + gating.
@@ -140,6 +144,12 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		status = "active"
 	}
 
+	var habitInterval *string
+	if in.IsHabit {
+		v := string(in.HabitInterval)
+		habitInterval = &v
+	}
+
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
 		ParentID:      parentID,
 		Title:         title,
@@ -151,7 +161,7 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		XPValue:       xpValue,
 		IsProject:     false,
 		IsHabit:       in.IsHabit,
-		HabitInterval: nil,
+		HabitInterval: habitInterval,
 	})
 	if err != nil {
 		return nil, err
