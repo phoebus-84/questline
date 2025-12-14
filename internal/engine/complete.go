@@ -58,12 +58,12 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		if task.HabitInterval == nil {
 			return nil, fmt.Errorf("habit %d is missing interval", id)
 		}
+
 		interval, err := ParseHabitInterval(*task.HabitInterval)
 		if err != nil {
 			return nil, err
 		}
 
-		// Diminishing returns: 6th+ completion within 7 days at same difficulty awards 50% XP.
 		since := now.Add(-7 * 24 * time.Hour)
 		recentSameDifficulty, err := s.completions.CountSinceWithDifficulty(ctx, id, since, task.Difficulty)
 		if err != nil {
@@ -82,7 +82,6 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		if err != nil {
 			return nil, err
 		}
-
 		if err := s.tasks.UpdateHabitAfterCompletion(ctx, id, now, nextDue); err != nil {
 			return nil, err
 		}
@@ -104,9 +103,13 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
 		}
-
 		if _, err := s.completions.Insert(ctx, id, now, task.Difficulty, xp); err != nil {
 			return nil, err
+		}
+
+		levelUp := p.Level > levelBefore
+		if levelUp {
+			_, _ = s.EvaluateBlueprintUnlocks(ctx)
 		}
 
 		return &CompleteResult{
@@ -114,7 +117,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 			XPAwarded:   xp,
 			LevelBefore: levelBefore,
 			LevelAfter:  p.Level,
-			LevelUp:     p.Level > levelBefore,
+			LevelUp:     levelUp,
 		}, nil
 	}
 
@@ -155,9 +158,13 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
 		}
-
 		if _, err := s.completions.Insert(ctx, id, now, task.Difficulty, bonus); err != nil {
 			return nil, err
+		}
+
+		levelUp := p.Level > levelBefore
+		if levelUp {
+			_, _ = s.EvaluateBlueprintUnlocks(ctx)
 		}
 
 		return &CompleteResult{
@@ -165,13 +172,12 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 			XPAwarded:     bonus,
 			LevelBefore:   levelBefore,
 			LevelAfter:    p.Level,
-			LevelUp:       p.Level > levelBefore,
+			LevelUp:       levelUp,
 			ProjectBonus:  true,
 			ProjectVolume: volume,
 		}, nil
 	}
 
-	// Leaf task completion.
 	children, err := s.tasks.ListChildren(ctx, id)
 	if err != nil {
 		return nil, err
@@ -204,9 +210,13 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 	if err := s.players.Update(ctx, p); err != nil {
 		return nil, err
 	}
-
 	if _, err := s.completions.Insert(ctx, id, now, task.Difficulty, xp); err != nil {
 		return nil, err
+	}
+
+	levelUp := p.Level > levelBefore
+	if levelUp {
+		_, _ = s.EvaluateBlueprintUnlocks(ctx)
 	}
 
 	return &CompleteResult{
@@ -214,7 +224,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		XPAwarded:   xp,
 		LevelBefore: levelBefore,
 		LevelAfter:  p.Level,
-		LevelUp:     p.Level > levelBefore,
+		LevelUp:     levelUp,
 	}, nil
 }
 

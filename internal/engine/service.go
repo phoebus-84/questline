@@ -15,6 +15,7 @@ type Service struct {
 	players     *storage.PlayerRepo
 	tasks       *storage.TaskRepo
 	completions *storage.CompletionRepo
+	blueprints  *storage.BlueprintRepo
 }
 
 func NewService(db *sql.DB) *Service {
@@ -23,12 +24,14 @@ func NewService(db *sql.DB) *Service {
 		players:     storage.NewPlayerRepo(db),
 		tasks:       storage.NewTaskRepo(db),
 		completions: storage.NewCompletionRepo(db),
+		blueprints:  storage.NewBlueprintRepo(db),
 	}
 }
 
 func (s *Service) PlayerRepo() *storage.PlayerRepo         { return s.players }
 func (s *Service) TaskRepo() *storage.TaskRepo             { return s.tasks }
 func (s *Service) CompletionRepo() *storage.CompletionRepo { return s.completions }
+func (s *Service) BlueprintRepo() *storage.BlueprintRepo   { return s.blueprints }
 
 func normalizeTitle(title string) (string, error) {
 	t := strings.TrimSpace(title)

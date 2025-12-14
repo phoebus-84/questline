@@ -140,6 +140,23 @@ func (r *TaskRepo) UpdateDifficultyAndXP(ctx context.Context, id int64, difficul
 	return nil
 }
 
+func (r *TaskRepo) HasCompletedProjectTitle(ctx context.Context, title string) (bool, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT 1
+		FROM tasks
+		WHERE is_project = 1 AND status = 'done' AND title = ?
+		LIMIT 1
+	`, title)
+	var one int
+	if err := row.Scan(&one); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("has completed project title: %w", err)
+	}
+	return true, nil
+}
+
 func (r *TaskRepo) UpdateStatus(ctx context.Context, id int64, status string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = ? WHERE id = ?`, status, id)
 	if err != nil {
