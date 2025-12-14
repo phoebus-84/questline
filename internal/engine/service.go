@@ -11,21 +11,24 @@ import (
 )
 
 type Service struct {
-	db      *sql.DB
-	players *storage.PlayerRepo
-	tasks   *storage.TaskRepo
+	db          *sql.DB
+	players     *storage.PlayerRepo
+	tasks       *storage.TaskRepo
+	completions *storage.CompletionRepo
 }
 
 func NewService(db *sql.DB) *Service {
 	return &Service{
-		db:      db,
-		players: storage.NewPlayerRepo(db),
-		tasks:   storage.NewTaskRepo(db),
+		db:          db,
+		players:     storage.NewPlayerRepo(db),
+		tasks:       storage.NewTaskRepo(db),
+		completions: storage.NewCompletionRepo(db),
 	}
 }
 
-func (s *Service) PlayerRepo() *storage.PlayerRepo { return s.players }
-func (s *Service) TaskRepo() *storage.TaskRepo     { return s.tasks }
+func (s *Service) PlayerRepo() *storage.PlayerRepo         { return s.players }
+func (s *Service) TaskRepo() *storage.TaskRepo             { return s.tasks }
+func (s *Service) CompletionRepo() *storage.CompletionRepo { return s.completions }
 
 func normalizeTitle(title string) (string, error) {
 	t := strings.TrimSpace(title)

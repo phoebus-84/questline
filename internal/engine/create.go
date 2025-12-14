@@ -21,7 +21,7 @@ type CreateProjectInput struct {
 }
 
 type CreateResult struct {
-	TaskID          int64
+	TaskID           int64
 	ProjectActivated bool
 }
 
@@ -53,16 +53,16 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (*Cr
 	}
 
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
-		ParentID:    nil,
-		Title:       title,
-		Description: nil,
-		Status:      "planning",
-		DueDate:     nil,
-		Difficulty:  int(DifficultyTrivial),
-		Attribute:   string(attr),
-		XPValue:     0,
-		IsProject:   true,
-		IsHabit:     false,
+		ParentID:      nil,
+		Title:         title,
+		Description:   nil,
+		Status:        "planning",
+		DueDate:       nil,
+		Difficulty:    int(DifficultyTrivial),
+		Attribute:     string(attr),
+		XPValue:       0,
+		IsProject:     true,
+		IsHabit:       false,
 		HabitInterval: nil,
 	})
 	if err != nil {
@@ -141,16 +141,16 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 	}
 
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
-		ParentID:    parentID,
-		Title:       title,
-		Description: nil,
-		Status:      status,
-		DueDate:     nil,
-		Difficulty:  int(in.Difficulty),
-		Attribute:   string(attr),
-		XPValue:     xpValue,
-		IsProject:   false,
-		IsHabit:     in.IsHabit,
+		ParentID:      parentID,
+		Title:         title,
+		Description:   nil,
+		Status:        status,
+		DueDate:       nil,
+		Difficulty:    int(in.Difficulty),
+		Attribute:     string(attr),
+		XPValue:       xpValue,
+		IsProject:     false,
+		IsHabit:       in.IsHabit,
 		HabitInterval: nil,
 	})
 	if err != nil {
