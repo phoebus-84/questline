@@ -1,53 +1,95 @@
-# Organizer
+# Questline (MVP)
 
-A task management application with AI-native issue tracking using Beads.
+Questline is a local-first RPG task manager built in Go. It stores state in a local SQLite DB and provides a CLI (and a minimal TUI) for creating tasks, completing them for XP, and unlocking features as you level up.
 
-## Getting Started
+## Requirements
 
-### Prerequisites
+- Go 1.24+
 
-- Python 3.8+
-- Beads CLI installed (`go install github.com/steveyegge/beads/cmd/bd@latest`)
-
-### Installation
+## Build & Run
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Run from source
+go run ./cmd/ql -- --help
 
-# Run the application
-python src/main.py
+# Build a binary
+go build ./cmd/ql
+
+# Or install to your GOPATH/bin
+go install ./cmd/ql@latest
 ```
 
-## Issue Tracking
+## Database Location
 
-This project uses [Beads](https://github.com/steveyegge/beads) for issue tracking. Issues are stored in `.beads/issues.jsonl` and synced via git.
+By default Questline uses:
 
-### Quick Commands
+- `$HOME/.questline.db`
+
+Override with:
+
+- `QL_DB_PATH=/path/to/questline.db`
+
+Example:
 
 ```bash
-# Create a new issue
-bd create "Your issue title"
+QL_DB_PATH=/tmp/questline.db go run ./cmd/ql -- status
+```
 
-# List all issues
-bd list
+## CLI Cheatsheet
 
-# View issue details
-bd show issue-1
+```bash
+# Show stats, gates, blueprint availability
+ql status
 
-# Update issue status
-bd update issue-1 --status in_progress
+# Add a task
+ql add "Buy groceries" --diff 2 --attr wis
 
-# Sync with remote
+# Add a project container (requires project unlock)
+ql add "Read a Book" --project --attr art
+
+# Add a subtask under a parent
+ql add "Chapter 1" --parent 12 --diff 2 --attr art
+
+# Add a habit (requires habit unlock)
+ql add "Push-ups" --habit --interval daily --diff 2 --attr str
+
+# Complete a task/habit by ID
+ql do 42
+
+# Print a tree view
+ql list
+
+# Accept a blueprint (once available)
+ql accept str_starter
+
+# Open the TUI dashboard
+ql board
+```
+
+Notes:
+
+- `--diff` is 1–5 (trivial → epic).
+- Attributes: `str|int|wis|art`.
+
+## TUI (`ql board`)
+
+The TUI is a minimal Bubbletea dashboard:
+
+- Sidebar: attribute progress + keys
+- Main: focus list (1–3 suggested leaf tasks) + collapsible quest log tree
+- Actions: `↑/↓` (or `j/k`), `enter` (expand/collapse), `c`/space (complete), `r` (refresh), `q` (quit)
+
+## Issue Tracking (Beads)
+
+This repo uses Beads (`bd`) for all issue tracking.
+
+```bash
+bd ready --json
+bd update <id> --status in_progress --json
+bd close <id> --reason "Done" --json
 bd sync
 ```
 
-For more details on using Beads with AI agents, see [`.beads/agents.md`](.beads/agents.md).
+## Legacy Python Placeholder
 
-## Development
-
-This project is designed to work seamlessly with AI coding assistants. Issues can be created, updated, and tracked directly from the command line.
-
-## License
-
-MIT
+There is an older Python placeholder app in `src/` which is not used by the Questline Go implementation.
