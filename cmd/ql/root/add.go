@@ -1,7 +1,11 @@
 package root
 
 import (
+	"context"
 	"errors"
+	"fmt"
+
+	"questline/internal/engine"
 
 	"github.com/spf13/cobra"
 )
@@ -24,7 +28,76 @@ func newAddCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errors.New("not implemented (bootstrap)")
+			ctx := context.Background()
+			svc, cleanup, err := openService(ctx)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			title := args[0]
+			attrParsed := engine.ParseAttribute(attr)
+
+			var parent *int64
+			if parentID != 0 {
+				v := parentID
+				parent = &v
+			}
+
+			if isProject {
+				res, err := svc.CreateProject(ctx, engine.CreateProjectInput{Title: title, Attribute: attrParsed})
+				if err != nil {
+					return err
+				}
+				created, _ := svc.TaskRepo().Get(ctx, res.TaskID)
+				fmt.Fprintf(cmd.OutOrStdout(), "Created project %d: %s (status=%s)\n", res.TaskID, created.Title, created.Status)
+				return nil
+			}
+
+			if diff < 1 || diff > 5 {
+				return errors.New("diff must be between 1 and 5")
+			}
+			d := engine.Difficulty(diff)
+
+			var interval engine.HabitInterval
+			if isHabit {
+				parsed, err := engine.ParseHabitInterval(habitInterval)
+				if err != nil {
+					return err
+				}
+				interval = parsed
+			}
+
+			res, err := svc.CreateTask(ctx, engine.CreateTaskInput{
+				Title:         title,
+				Difficulty:    d,
+				Attribute:     attrParsed,
+				ParentID:      parent,
+				IsHabit:       isHabit,
+				HabitInterval: interval,
+			})
+			if err != nil {
+				return err
+			}
+			created, err := svc.TaskRepo().Get(ctx, res.TaskID)
+			if err != nil {
+				return err
+			}
+
+			kind := "task"
+			if created.IsHabit {
+				kind = "habit"
+			}
+			if created.IsProject {
+				kind = "project"
+			}
+
+			if res.ProjectActivated {
+				fmt.Fprintf(cmd.OutOrStdout(), "Created %s %d: %s (xp=%d) [project activated]\n", kind, res.TaskID, created.Title, created.XPValue)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Created %s %d: %s (xp=%d)\n", kind, res.TaskID, created.Title, created.XPValue)
+			return nil
 		},
 	}
 
@@ -34,13 +107,6 @@ func newAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&isProject, "project", false, "Create a project container (requires unlock)")
 	cmd.Flags().BoolVar(&isHabit, "habit", false, "Create a recurring habit (requires unlock)")
 	cmd.Flags().StringVar(&habitInterval, "interval", "daily", "Habit interval (daily|weekly)")
-
-	_ = diff
-	_ = attr
-	_ = parentID
-	_ = isProject
-	_ = isHabit
-	_ = habitInterval
 
 	return cmd
 }
