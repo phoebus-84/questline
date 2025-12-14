@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-package engine
 package engine
 
 type Attribute string
@@ -38,29 +34,3 @@ const (
 func (d Difficulty) IsValid() bool {
 	return d >= DifficultyTrivial && d <= DifficultyEpic
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}	return d >= DifficultyTrivial && d <= DifficultyEpicfunc (d Difficulty) IsValid() bool {)	DifficultyEpic    Difficulty = 5	DifficultyHard    Difficulty = 4	DifficultyMedium  Difficulty = 3	DifficultyEasy    Difficulty = 2	DifficultyTrivial Difficulty = 1const (type Difficulty intconst DefaultAttribute Attribute = AttributeWIS// DefaultAttribute is used when user input is missing/invalid.}	}		return false	default:		return true	case AttributeSTR, AttributeINT, AttributeWIS, AttributeART:	switch a {func (a Attribute) IsValid() bool {
