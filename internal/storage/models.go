@@ -13,19 +13,19 @@ type Player struct {
 }
 
 type Task struct {
-	ID           int64
-	ParentID     *int64
-	Title        string
-	Description  *string
-	Status       string
-	CreatedAt    time.Time
-	CompletedAt  *time.Time
-	DueDate      *time.Time
-	Difficulty   int
-	Attribute    string
-	XPValue      int
-	IsProject    bool
-	IsHabit      bool
+	ID            int64
+	ParentID      *int64
+	Title         string
+	Description   *string
+	Status        string
+	CreatedAt     time.Time
+	CompletedAt   *time.Time
+	DueDate       *time.Time
+	Difficulty    int
+	Attribute     string
+	XPValue       int
+	IsProject     bool
+	IsHabit       bool
 	HabitInterval *string
 }
 

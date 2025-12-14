@@ -141,19 +141,19 @@ type scanner interface {
 
 func scanTaskRow(row scanner) (*Task, error) {
 	var (
-		id int64
-		parent sql.NullInt64
-		title string
-		description sql.NullString
-		status string
-		createdAt time.Time
-		completedAt sql.NullTime
-		dueDate sql.NullTime
-		difficulty int
-		attribute string
-		xpValue int
-		isProject int
-		isHabit int
+		id            int64
+		parent        sql.NullInt64
+		title         string
+		description   sql.NullString
+		status        string
+		createdAt     time.Time
+		completedAt   sql.NullTime
+		dueDate       sql.NullTime
+		difficulty    int
+		attribute     string
+		xpValue       int
+		isProject     int
+		isHabit       int
 		habitInterval sql.NullString
 	)
 
