@@ -8,11 +8,11 @@ import (
 )
 
 type CreateTaskInput struct {
-	Title      string
-	Difficulty Difficulty
-	Attribute  Attribute
-	ParentID   *int64
-	IsHabit    bool
+	Title         string
+	Difficulty    Difficulty
+	Attribute     Attribute
+	ParentID      *int64
+	IsHabit       bool
 	HabitInterval HabitInterval
 }
 
