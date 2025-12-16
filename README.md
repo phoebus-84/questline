@@ -97,8 +97,14 @@ ql add "Chapter 1" --parent 12 --diff 2 --attr art
 # Add a habit (requires habit unlock)
 ql add "Push-ups" --habit --interval daily --diff 2 --attr str
 
+# Add a habit with duration and goal
+ql add "Learn Spanish" --habit --interval daily --duration 30d --goal 30 --attr int
+
 # Complete a task/habit by ID
 ql do 42
+
+# Restore (undo) a completion
+ql restore 42
 
 # Print a tree view
 ql list
@@ -113,7 +119,7 @@ ql board
 Notes:
 
 - `--diff` is 1–5 (trivial → epic).
-- Attributes: `str|int|wis|art`.
+- Attributes: `str|int|wis|art|home|out|read|cinema|career`.
 
 ## Sample outputs
 
@@ -129,8 +135,13 @@ Total XP: 0 (next at 500, 500 to go)
 📊 Attributes
 - 💪 STR: lvl 0 (xp 0)
 - 🧠 INT: lvl 0 (xp 0)
-- 🎨 ART: lvl 0 (xp 0)
 - 🧘 WIS: lvl 0 (xp 0)
+- 🎨 ART: lvl 0 (xp 0)
+- 🏠 HOME: lvl 0 (xp 0)
+- 🌳 OUT: lvl 0 (xp 0)
+- 📚 READ: lvl 0 (xp 0)
+- 🎬 CINEMA: lvl 0 (xp 0)
+- 💼 CAREER: lvl 0 (xp 0)
 
 🔓 Gates
 - Max active tasks: 3 (currently 0)
@@ -184,11 +195,24 @@ Once you reach the required gate (e.g. habits unlock at level 5):
 
 ## TUI (`ql board`)
 
-The TUI is a minimal Bubbletea dashboard:
+The TUI is a retro gaming-style dashboard with phosphor green/amber aesthetic:
 
-- Sidebar: attribute progress + keys
-- Main: focus list (1–3 suggested leaf tasks) + collapsible quest log tree
-- Actions: `↑/↓` (or `j/k`), `enter` (expand/collapse), `c`/space (complete), `r` (refresh), `q` (quit)
+- **Header**: Level, total XP, progress to next level
+- **Sidebar**: Attribute levels, weekly XP spark graphs, achievements/badges, key help
+- **Main**: Focus list (suggested tasks) + collapsible quest log tree
+- **Footer**: Status messages and tips
+
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` or `j/k` | Navigate |
+| `Enter` | Expand/collapse |
+| `c` or `Space` | Complete task |
+| `d` or `Backspace` | Delete task (with confirmation) |
+| `r` | Refresh |
+| `?` | Toggle help |
+| `q` | Quit |
 
 ## Issue Tracking (Beads)
 
