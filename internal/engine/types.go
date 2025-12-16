@@ -10,11 +10,11 @@ const (
 	AttributeART Attribute = "ART" // Art - creativity, culture
 
 	// New 5 attributes
-	AttributeHOME    Attribute = "HOME"    // Household & DIY
-	AttributeOUT     Attribute = "OUT"     // Outdoors & nature
-	AttributeREAD    Attribute = "READ"    // Reading
-	AttributeCINEMA  Attribute = "CINEMA"  // Cinema - watching movies
-	AttributeCAREER  Attribute = "CAREER"  // Career & Finance
+	AttributeHOME   Attribute = "HOME"   // Household & DIY
+	AttributeOUT    Attribute = "OUT"    // Outdoors & nature
+	AttributeREAD   Attribute = "READ"   // Reading
+	AttributeCINEMA Attribute = "CINEMA" // Cinema - watching movies
+	AttributeCAREER Attribute = "CAREER" // Career & Finance
 )
 
 // AllAttributes returns all valid attributes in display order.

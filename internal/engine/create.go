@@ -99,6 +99,11 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		return nil, err
 	}
 
+	// Check difficulty gate
+	if err := CanUseDifficulty(p.Level, in.Difficulty); err != nil {
+		return nil, err
+	}
+
 	if in.IsHabit {
 		if err := CanCreateHabit(p.Level); err != nil {
 			return nil, err

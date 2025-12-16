@@ -10,6 +10,54 @@ const (
 	LevelReviews    = 15
 )
 
+// DifficultyUnlockLevels maps difficulty levels to the player level required.
+// Players start with difficulty 1 only. Higher difficulties unlock as they level up.
+var DifficultyUnlockLevels = map[Difficulty]int{
+	DifficultyTrivial: 0,  // Always available
+	DifficultyEasy:    2,  // Level 2+
+	DifficultyMedium:  5,  // Level 5+
+	DifficultyHard:    8,  // Level 8+
+	DifficultyEpic:    12, // Level 12+
+}
+
+// MaxDifficultyForLevel returns the highest difficulty available at the given player level.
+func MaxDifficultyForLevel(level int) Difficulty {
+	max := DifficultyTrivial
+	for diff, req := range DifficultyUnlockLevels {
+		if level >= req && diff > max {
+			max = diff
+		}
+	}
+	return max
+}
+
+// CanUseDifficulty returns an error if the player level is too low for the requested difficulty.
+func CanUseDifficulty(level int, difficulty Difficulty) error {
+	reqLevel, ok := DifficultyUnlockLevels[difficulty]
+	if !ok {
+		return fmt.Errorf("invalid difficulty: %d", difficulty)
+	}
+	if level < reqLevel {
+		return DifficultyGateError{
+			Difficulty:    difficulty,
+			RequiredLevel: reqLevel,
+			CurrentLevel:  level,
+		}
+	}
+	return nil
+}
+
+// DifficultyGateError is returned when a player tries to use a locked difficulty.
+type DifficultyGateError struct {
+	Difficulty    Difficulty
+	RequiredLevel int
+	CurrentLevel  int
+}
+
+func (e DifficultyGateError) Error() string {
+	return fmt.Sprintf("difficulty %d requires level %d (currently %d)", e.Difficulty, e.RequiredLevel, e.CurrentLevel)
+}
+
 // MaxActiveTasks returns the maximum number of active tasks allowed.
 // Spec:
 // - Level 0 (Drifter): 3

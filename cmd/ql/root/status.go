@@ -81,6 +81,22 @@ func newStatusCmd() *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "- %s %s\n", ui.Key.Render("Habits:"), enabledStr(computedLevel >= engine.LevelHabits))
 			fmt.Fprintf(cmd.OutOrStdout(), "- %s %s\n", ui.Key.Render("Projects:"), enabledStr(computedLevel >= engine.LevelProjects))
+			// Show unlocked difficulty levels
+			maxDiff := engine.MaxDifficultyForLevel(computedLevel)
+			diffNames := []string{"Trivial", "Easy", "Medium", "Hard", "Epic"}
+			diffUnlocked := make([]string, 0)
+			for d := engine.DifficultyTrivial; d <= maxDiff; d++ {
+				diffUnlocked = append(diffUnlocked, fmt.Sprintf("%d-%s", d, diffNames[d-1]))
+			}
+			nextDiffLevel := 0
+			if maxDiff < engine.DifficultyEpic {
+				nextDiffLevel = engine.DifficultyUnlockLevels[maxDiff+1]
+			}
+			diffInfo := ui.Good.Render(fmt.Sprintf("1-%d", maxDiff))
+			if nextDiffLevel > 0 {
+				diffInfo += " " + ui.Muted.Render(fmt.Sprintf("(next at L%d)", nextDiffLevel))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "- %s %s\n", ui.Key.Render("Difficulty:"), diffInfo)
 			fmt.Fprintln(cmd.OutOrStdout(), "")
 
 			// Ensure blueprint rows exist + unlocked statuses are up to date.
