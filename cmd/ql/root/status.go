@@ -40,10 +40,17 @@ func newStatusCmd() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "")
 
 			fmt.Fprintln(cmd.OutOrStdout(), ui.H2.Render("📊 Attributes"))
+			// Original 4 attributes
 			fmt.Fprintf(cmd.OutOrStdout(), "- 💪 STR: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPStr), p.XPStr)
 			fmt.Fprintf(cmd.OutOrStdout(), "- 🧠 INT: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPInt), p.XPInt)
-			fmt.Fprintf(cmd.OutOrStdout(), "- 🎨 ART: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPArt), p.XPArt)
 			fmt.Fprintf(cmd.OutOrStdout(), "- 🧘 WIS: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPWis), p.XPWis)
+			fmt.Fprintf(cmd.OutOrStdout(), "- 🎨 ART: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPArt), p.XPArt)
+			// New 5 attributes
+			fmt.Fprintf(cmd.OutOrStdout(), "- 🏠 HOME: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPHome), p.XPHome)
+			fmt.Fprintf(cmd.OutOrStdout(), "- 🌲 OUT: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPOut), p.XPOut)
+			fmt.Fprintf(cmd.OutOrStdout(), "- 📚 READ: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPRead), p.XPRead)
+			fmt.Fprintf(cmd.OutOrStdout(), "- 🎬 CINEMA: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPCinema), p.XPCinema)
+			fmt.Fprintf(cmd.OutOrStdout(), "- 💼 CAREER: lvl %d (xp %d)\n", engine.AttributeLevelForXP(p.XPCareer), p.XPCareer)
 			fmt.Fprintln(cmd.OutOrStdout(), "")
 
 			all, err := svc.TaskRepo().ListAll(ctx)

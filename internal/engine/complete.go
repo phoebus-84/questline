@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"questline/internal/storage"
 )
 
 type CompleteResult struct {
@@ -25,6 +27,32 @@ func parseStoredAttribute(s string) Attribute {
 		return a
 	}
 	return DefaultAttribute
+}
+
+// addAttributeXP adds XP to the appropriate attribute on the player.
+func addAttributeXP(p *storage.Player, attr Attribute, xp int) {
+	switch attr {
+	case AttributeSTR:
+		p.XPStr += xp
+	case AttributeINT:
+		p.XPInt += xp
+	case AttributeART:
+		p.XPArt += xp
+	case AttributeHOME:
+		p.XPHome += xp
+	case AttributeOUT:
+		p.XPOut += xp
+	case AttributeREAD:
+		p.XPRead += xp
+	case AttributeCINEMA:
+		p.XPCinema += xp
+	case AttributeCAREER:
+		p.XPCareer += xp
+	case AttributeWIS:
+		fallthrough
+	default:
+		p.XPWis += xp
+	}
 }
 
 func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, error) {
@@ -87,18 +115,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		}
 
 		p.XPTotal += xp
-		switch attr {
-		case AttributeSTR:
-			p.XPStr += xp
-		case AttributeINT:
-			p.XPInt += xp
-		case AttributeART:
-			p.XPArt += xp
-		case AttributeWIS:
-			fallthrough
-		default:
-			p.XPWis += xp
-		}
+		addAttributeXP(p, attr, xp)
 		p.Level = LevelForTotalXP(p.XPTotal)
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
@@ -142,18 +159,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		}
 
 		p.XPTotal += bonus
-		switch attr {
-		case AttributeSTR:
-			p.XPStr += bonus
-		case AttributeINT:
-			p.XPInt += bonus
-		case AttributeART:
-			p.XPArt += bonus
-		case AttributeWIS:
-			fallthrough
-		default:
-			p.XPWis += bonus
-		}
+		addAttributeXP(p, attr, bonus)
 		p.Level = LevelForTotalXP(p.XPTotal)
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
@@ -194,18 +200,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 	}
 
 	p.XPTotal += xp
-	switch attr {
-	case AttributeSTR:
-		p.XPStr += xp
-	case AttributeINT:
-		p.XPInt += xp
-	case AttributeART:
-		p.XPArt += xp
-	case AttributeWIS:
-		fallthrough
-	default:
-		p.XPWis += xp
-	}
+	addAttributeXP(p, attr, xp)
 	p.Level = LevelForTotalXP(p.XPTotal)
 	if err := s.players.Update(ctx, p); err != nil {
 		return nil, err

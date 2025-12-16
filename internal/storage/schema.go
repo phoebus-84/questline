@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -15,7 +16,12 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			xp_str INTEGER DEFAULT 0,
 			xp_int INTEGER DEFAULT 0,
 			xp_wis INTEGER DEFAULT 0,
-			xp_art INTEGER DEFAULT 0
+			xp_art INTEGER DEFAULT 0,
+			xp_home INTEGER DEFAULT 0,
+			xp_out INTEGER DEFAULT 0,
+			xp_read INTEGER DEFAULT 0,
+			xp_cinema INTEGER DEFAULT 0,
+			xp_career INTEGER DEFAULT 0
 		);`,
 		`CREATE TABLE IF NOT EXISTS tasks (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +65,22 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	for _, stmt := range stmts {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate: %w", err)
+		}
+	}
+
+	// Add new attribute columns to existing player tables (ignore if already exists)
+	alterStmts := []string{
+		`ALTER TABLE player ADD COLUMN xp_home INTEGER DEFAULT 0;`,
+		`ALTER TABLE player ADD COLUMN xp_out INTEGER DEFAULT 0;`,
+		`ALTER TABLE player ADD COLUMN xp_read INTEGER DEFAULT 0;`,
+		`ALTER TABLE player ADD COLUMN xp_cinema INTEGER DEFAULT 0;`,
+		`ALTER TABLE player ADD COLUMN xp_career INTEGER DEFAULT 0;`,
+	}
+	for _, stmt := range alterStmts {
+		_, err := db.ExecContext(ctx, stmt)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			// Ignore "duplicate column" errors - column already exists
+			return fmt.Errorf("migrate alter: %w", err)
 		}
 	}
 

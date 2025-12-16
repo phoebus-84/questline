@@ -102,7 +102,7 @@ func newAddCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&diff, "diff", "d", 1, "Difficulty (1-5)")
-	cmd.Flags().StringVarP(&attr, "attr", "a", "wis", "Attribute (str|int|wis|art)")
+	cmd.Flags().StringVarP(&attr, "attr", "a", "wis", "Attribute (str|int|wis|art|home|out|read|cinema|career)")
 	cmd.Flags().Int64VarP(&parentID, "parent", "p", 0, "Parent task ID (subtasks/projects)")
 	cmd.Flags().BoolVar(&isProject, "project", false, "Create a project container (requires unlock)")
 	cmd.Flags().BoolVar(&isHabit, "habit", false, "Create a recurring habit (requires unlock)")

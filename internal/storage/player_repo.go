@@ -17,10 +17,15 @@ func NewPlayerRepo(db *sql.DB) *PlayerRepo {
 }
 
 func (r *PlayerRepo) Get(ctx context.Context, key string) (*Player, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT key, level, xp_total, xp_str, xp_int, xp_wis, xp_art FROM player WHERE key = ?`, key)
+	row := r.db.QueryRowContext(ctx, `
+		SELECT key, level, xp_total, xp_str, xp_int, xp_wis, xp_art,
+		       xp_home, xp_out, xp_read, xp_cinema, xp_career
+		FROM player WHERE key = ?`, key)
 
 	var p Player
-	if err := row.Scan(&p.Key, &p.Level, &p.XPTotal, &p.XPStr, &p.XPInt, &p.XPWis, &p.XPArt); err != nil {
+	if err := row.Scan(&p.Key, &p.Level, &p.XPTotal,
+		&p.XPStr, &p.XPInt, &p.XPWis, &p.XPArt,
+		&p.XPHome, &p.XPOut, &p.XPRead, &p.XPCinema, &p.XPCareer); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -47,9 +52,11 @@ func (r *PlayerRepo) GetOrCreateMain(ctx context.Context) (*Player, error) {
 func (r *PlayerRepo) Update(ctx context.Context, p *Player) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE player
-		SET level = ?, xp_total = ?, xp_str = ?, xp_int = ?, xp_wis = ?, xp_art = ?
+		SET level = ?, xp_total = ?, xp_str = ?, xp_int = ?, xp_wis = ?, xp_art = ?,
+		    xp_home = ?, xp_out = ?, xp_read = ?, xp_cinema = ?, xp_career = ?
 		WHERE key = ?
-	`, p.Level, p.XPTotal, p.XPStr, p.XPInt, p.XPWis, p.XPArt, p.Key)
+	`, p.Level, p.XPTotal, p.XPStr, p.XPInt, p.XPWis, p.XPArt,
+		p.XPHome, p.XPOut, p.XPRead, p.XPCinema, p.XPCareer, p.Key)
 	if err != nil {
 		return fmt.Errorf("player update: %w", err)
 	}

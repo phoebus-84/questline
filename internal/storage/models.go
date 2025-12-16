@@ -6,10 +6,17 @@ type Player struct {
 	Key     string
 	Level   int
 	XPTotal int
-	XPStr   int
-	XPInt   int
-	XPWis   int
-	XPArt   int
+	// Original 4 attributes
+	XPStr int
+	XPInt int
+	XPWis int
+	XPArt int
+	// New 5 attributes
+	XPHome   int
+	XPOut    int
+	XPRead   int
+	XPCinema int
+	XPCareer int
 }
 
 type Task struct {

@@ -332,10 +332,17 @@ func (m boardModel) renderSidebar() string {
 		return ui.PanelTitle.Render("📊 Stats") + "\n\n" + ui.Muted.Render(m.spinner.View()+" loading…")
 	}
 	lines := []string{ui.PanelTitle.Render("📊 Attributes")}
+	// Original 4 attributes
 	lines = append(lines, renderAttr("💪 STR", m.player.XPStr))
 	lines = append(lines, renderAttr("🧠 INT", m.player.XPInt))
-	lines = append(lines, renderAttr("🎨 ART", m.player.XPArt))
 	lines = append(lines, renderAttr("🧘 WIS", m.player.XPWis))
+	lines = append(lines, renderAttr("🎨 ART", m.player.XPArt))
+	// New 5 attributes
+	lines = append(lines, renderAttr("🏠 HOME", m.player.XPHome))
+	lines = append(lines, renderAttr("🌲 OUT", m.player.XPOut))
+	lines = append(lines, renderAttr("📚 READ", m.player.XPRead))
+	lines = append(lines, renderAttr("🎬 CINEMA", m.player.XPCinema))
+	lines = append(lines, renderAttr("💼 CAREER", m.player.XPCareer))
 	lines = append(lines, "")
 	lines = append(lines, ui.PanelTitle.Render("⌨️  Keys"))
 	lines = append(lines, ui.Muted.Render(m.help.ShortHelpView(m.keys.ShortHelp())))
