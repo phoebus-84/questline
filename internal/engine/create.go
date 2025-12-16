@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"questline/internal/storage"
 )
@@ -15,6 +16,9 @@ type CreateTaskInput struct {
 	ParentID      *int64
 	IsHabit       bool
 	HabitInterval HabitInterval
+	// Habit duration fields
+	HabitDuration *time.Duration // How long the habit challenge lasts (nil = forever)
+	HabitGoal     *int           // Target completions to complete the habit (nil = ongoing)
 }
 
 type CreateProjectInput struct {
@@ -177,19 +181,35 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		}
 	}
 
+	// Calculate habit duration dates
+	var habitStartDate, habitEndDate *time.Time
+	var habitGoal *int
+	if in.IsHabit {
+		now := time.Now()
+		habitStartDate = &now
+		if in.HabitDuration != nil {
+			endDate := now.Add(*in.HabitDuration)
+			habitEndDate = &endDate
+		}
+		habitGoal = in.HabitGoal
+	}
+
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
-		ParentID:      parentID,
-		Title:         title,
-		Description:   nil,
-		Status:        status,
-		DueDate:       nil,
-		Difficulty:    int(in.Difficulty),
-		Attribute:     string(attr),
-		Attributes:    attrs,
-		XPValue:       xpValue,
-		IsProject:     false,
-		IsHabit:       in.IsHabit,
-		HabitInterval: habitInterval,
+		ParentID:       parentID,
+		Title:          title,
+		Description:    nil,
+		Status:         status,
+		DueDate:        nil,
+		Difficulty:     int(in.Difficulty),
+		Attribute:      string(attr),
+		Attributes:     attrs,
+		XPValue:        xpValue,
+		IsProject:      false,
+		IsHabit:        in.IsHabit,
+		HabitInterval:  habitInterval,
+		HabitStartDate: habitStartDate,
+		HabitEndDate:   habitEndDate,
+		HabitGoal:      habitGoal,
 	})
 	if err != nil {
 		return nil, err

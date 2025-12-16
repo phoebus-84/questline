@@ -73,3 +73,28 @@ func (r *CompletionRepo) Last(ctx context.Context, taskID int64) (*TaskCompletio
 	}
 	return &tc, nil
 }
+func (r *CompletionRepo) ListByTask(ctx context.Context, taskID int64) ([]TaskCompletion, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, task_id, completed_at, difficulty, xp_awarded
+		FROM task_completions
+		WHERE task_id = ?
+		ORDER BY completed_at ASC
+	`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("completion list: %w", err)
+	}
+	defer rows.Close()
+
+	var out []TaskCompletion
+	for rows.Next() {
+		var tc TaskCompletion
+		if err := rows.Scan(&tc.ID, &tc.TaskID, &tc.CompletedAt, &tc.Difficulty, &tc.XPAwarded); err != nil {
+			return nil, fmt.Errorf("completion scan: %w", err)
+		}
+		out = append(out, tc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("completion rows: %w", err)
+	}
+	return out, nil
+}

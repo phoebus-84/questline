@@ -17,18 +17,21 @@ func NewTaskRepo(db *sql.DB) *TaskRepo {
 }
 
 type TaskInsert struct {
-	ParentID      *int64
-	Title         string
-	Description   *string
-	Status        string
-	DueDate       *time.Time
-	Difficulty    int
-	Attribute     string
-	Attributes    map[string]int // Multi-attribute weights (JSON)
-	XPValue       int
-	IsProject     bool
-	IsHabit       bool
-	HabitInterval *string
+	ParentID       *int64
+	Title          string
+	Description    *string
+	Status         string
+	DueDate        *time.Time
+	Difficulty     int
+	Attribute      string
+	Attributes     map[string]int // Multi-attribute weights (JSON)
+	XPValue        int
+	IsProject      bool
+	IsHabit        bool
+	HabitInterval  *string
+	HabitStartDate *time.Time
+	HabitEndDate   *time.Time
+	HabitGoal      *int
 }
 
 func (r *TaskRepo) Insert(ctx context.Context, in TaskInsert) (int64, error) {
@@ -47,9 +50,10 @@ func (r *TaskRepo) Insert(ctx context.Context, in TaskInsert) (int64, error) {
 			parent_id, title, description,
 			status, due_date,
 			difficulty, attribute, attributes, xp_value,
-			is_project, is_habit, habit_interval
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ParentID, in.Title, in.Description, in.Status, in.DueDate, in.Difficulty, in.Attribute, attrsJSON, in.XPValue, boolToInt(in.IsProject), boolToInt(in.IsHabit), in.HabitInterval)
+			is_project, is_habit, habit_interval,
+			habit_start_date, habit_end_date, habit_goal
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ParentID, in.Title, in.Description, in.Status, in.DueDate, in.Difficulty, in.Attribute, attrsJSON, in.XPValue, boolToInt(in.IsProject), boolToInt(in.IsHabit), in.HabitInterval, in.HabitStartDate, in.HabitEndDate, in.HabitGoal)
 	if err != nil {
 		return 0, fmt.Errorf("task insert: %w", err)
 	}
@@ -63,7 +67,8 @@ func (r *TaskRepo) Insert(ctx context.Context, in TaskInsert) (int64, error) {
 func (r *TaskRepo) Get(ctx context.Context, id int64) (*Task, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval,
+			habit_start_date, habit_end_date, habit_goal
 		FROM tasks
 		WHERE id = ?
 	`, id)
@@ -74,7 +79,8 @@ func (r *TaskRepo) Get(ctx context.Context, id int64) (*Task, error) {
 func (r *TaskRepo) ListAll(ctx context.Context) ([]Task, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval,
+			habit_start_date, habit_end_date, habit_goal
 		FROM tasks
 		ORDER BY id ASC
 	`)
@@ -100,7 +106,8 @@ func (r *TaskRepo) ListAll(ctx context.Context) ([]Task, error) {
 func (r *TaskRepo) ListChildren(ctx context.Context, parentID int64) ([]Task, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval,
+			habit_start_date, habit_end_date, habit_goal
 		FROM tasks
 		WHERE parent_id = ?
 		ORDER BY id ASC
@@ -190,26 +197,30 @@ type scanner interface {
 
 func scanTaskRow(row scanner) (*Task, error) {
 	var (
-		id            int64
-		parent        sql.NullInt64
-		title         string
-		description   sql.NullString
-		status        string
-		createdAt     time.Time
-		completedAt   sql.NullTime
-		dueDate       sql.NullTime
-		difficulty    int
-		attribute     string
-		attributesRaw sql.NullString
-		xpValue       int
-		isProject     int
-		isHabit       int
-		habitInterval sql.NullString
+		id             int64
+		parent         sql.NullInt64
+		title          string
+		description    sql.NullString
+		status         string
+		createdAt      time.Time
+		completedAt    sql.NullTime
+		dueDate        sql.NullTime
+		difficulty     int
+		attribute      string
+		attributesRaw  sql.NullString
+		xpValue        int
+		isProject      int
+		isHabit        int
+		habitInterval  sql.NullString
+		habitStartDate sql.NullTime
+		habitEndDate   sql.NullTime
+		habitGoal      sql.NullInt64
 	)
 
 	if err := row.Scan(
 		&id, &parent, &title, &description, &status, &createdAt, &completedAt, &dueDate,
 		&difficulty, &attribute, &attributesRaw, &xpValue, &isProject, &isHabit, &habitInterval,
+		&habitStartDate, &habitEndDate, &habitGoal,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -242,6 +253,21 @@ func scanTaskRow(row scanner) (*Task, error) {
 		v := habitInterval.String
 		interval = &v
 	}
+	var hStart *time.Time
+	if habitStartDate.Valid {
+		v := habitStartDate.Time
+		hStart = &v
+	}
+	var hEnd *time.Time
+	if habitEndDate.Valid {
+		v := habitEndDate.Time
+		hEnd = &v
+	}
+	var hGoal *int
+	if habitGoal.Valid {
+		v := int(habitGoal.Int64)
+		hGoal = &v
+	}
 
 	// Parse attributes JSON
 	var attrs map[string]int
@@ -252,21 +278,24 @@ func scanTaskRow(row scanner) (*Task, error) {
 	}
 
 	return &Task{
-		ID:            id,
-		ParentID:      parentID,
-		Title:         title,
-		Description:   desc,
-		Status:        status,
-		CreatedAt:     createdAt,
-		CompletedAt:   comp,
-		DueDate:       due,
-		Difficulty:    difficulty,
-		Attribute:     attribute,
-		Attributes:    attrs,
-		XPValue:       xpValue,
-		IsProject:     isProject != 0,
-		IsHabit:       isHabit != 0,
-		HabitInterval: interval,
+		ID:             id,
+		ParentID:       parentID,
+		Title:          title,
+		Description:    desc,
+		Status:         status,
+		CreatedAt:      createdAt,
+		CompletedAt:    comp,
+		DueDate:        due,
+		Difficulty:     difficulty,
+		Attribute:      attribute,
+		Attributes:     attrs,
+		XPValue:        xpValue,
+		IsProject:      isProject != 0,
+		IsHabit:        isHabit != 0,
+		HabitInterval:  interval,
+		HabitStartDate: hStart,
+		HabitEndDate:   hEnd,
+		HabitGoal:      hGoal,
 	}, nil
 }
 

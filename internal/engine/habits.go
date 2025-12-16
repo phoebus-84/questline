@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"questline/internal/storage"
 )
 
 type HabitInterval string
@@ -44,3 +46,51 @@ func NextDueDate(now time.Time, interval HabitInterval) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid habit interval: %q", interval)
 	}
 }
+
+// HabitProgress represents the current progress of a timed/goal habit.
+type HabitProgress struct {
+	Completions int        // Number of completions so far
+	Goal        *int       // Target completions (nil = ongoing)
+	StartDate   *time.Time // When habit started
+	EndDate     *time.Time // When habit ends (nil = forever)
+	Completed   bool       // Whether habit has reached its goal
+	Expired     bool       // Whether habit has expired without reaching goal
+}
+
+// GetHabitProgress calculates the current progress of a habit.
+func GetHabitProgress(task *storage.Task, completions []storage.TaskCompletion, now time.Time) HabitProgress {
+	progress := HabitProgress{
+		Goal:      task.HabitGoal,
+		StartDate: task.HabitStartDate,
+		EndDate:   task.HabitEndDate,
+	}
+
+	// Count completions within the duration window
+	startDate := task.HabitStartDate
+	if startDate == nil {
+		// If no start date, use task creation date
+		startDate = &task.CreatedAt
+	}
+
+	for _, c := range completions {
+		// Only count completions within the duration window
+		if c.CompletedAt.Before(*startDate) {
+			continue
+		}
+		if task.HabitEndDate != nil && c.CompletedAt.After(*task.HabitEndDate) {
+			continue
+		}
+		progress.Completions++
+	}
+
+	// Check if goal is reached
+	if task.HabitGoal != nil && progress.Completions >= *task.HabitGoal {
+		progress.Completed = true
+	}
+
+	// Check if expired (end date passed without reaching goal)
+	if task.HabitEndDate != nil && now.After(*task.HabitEndDate) && !progress.Completed {
+		progress.Expired = true
+	}
+
+	return progress}

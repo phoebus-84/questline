@@ -35,6 +35,10 @@ type Task struct {
 	IsProject     bool
 	IsHabit       bool
 	HabitInterval *string
+	// Habit duration fields
+	HabitStartDate *time.Time // When the habit challenge started
+	HabitEndDate   *time.Time // When the habit challenge ends (nil = forever)
+	HabitGoal      *int       // Target completions to finish the habit (nil = ongoing)
 }
 
 type Blueprint struct {

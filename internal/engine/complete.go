@@ -11,13 +11,14 @@ import (
 )
 
 type CompleteResult struct {
-	TaskID        int64
-	XPAwarded     int
-	LevelBefore   int
-	LevelAfter    int
-	LevelUp       bool
-	ProjectBonus  bool
-	ProjectVolume int
+	TaskID         int64
+	XPAwarded      int
+	LevelBefore    int
+	LevelAfter     int
+	LevelUp        bool
+	ProjectBonus   bool
+	ProjectVolume  int
+	HabitCompleted bool // True when a goal-based habit reached its completion target
 }
 
 func parseStoredAttribute(s string) Attribute {
@@ -161,17 +162,35 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 			return nil, err
 		}
 
+		// Check if habit goal is reached
+		habitCompleted := false
+		if task.HabitGoal != nil {
+			allComps, err := s.completions.ListByTask(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			progress := GetHabitProgress(task, allComps, now)
+			if progress.Completed {
+				// Mark habit as done (goal reached!)
+				if err := s.tasks.MarkDone(ctx, id, now); err != nil {
+					return nil, err
+				}
+				habitCompleted = true
+			}
+		}
+
 		levelUp := p.Level > levelBefore
 		if levelUp {
 			_, _ = s.EvaluateBlueprintUnlocks(ctx)
 		}
 
 		return &CompleteResult{
-			TaskID:      id,
-			XPAwarded:   xp,
-			LevelBefore: levelBefore,
-			LevelAfter:  p.Level,
-			LevelUp:     levelUp,
+			TaskID:         id,
+			XPAwarded:      xp,
+			LevelBefore:    levelBefore,
+			LevelAfter:     p.Level,
+			LevelUp:        levelUp,
+			HabitCompleted: habitCompleted,
 		}, nil
 	}
 

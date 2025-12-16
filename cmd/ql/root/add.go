@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"questline/internal/engine"
 	"questline/internal/ui"
@@ -18,6 +19,8 @@ func newAddCmd() *cobra.Command {
 	var isProject bool
 	var isHabit bool
 	var habitInterval string
+	var habitDuration string
+	var habitGoal int
 
 	cmd := &cobra.Command{
 		Use:   "add <title>",
@@ -65,12 +68,28 @@ func newAddCmd() *cobra.Command {
 			d := engine.Difficulty(diff)
 
 			var interval engine.HabitInterval
+			var duration *time.Duration
+			var goal *int
 			if isHabit {
 				parsed, err := engine.ParseHabitInterval(habitInterval)
 				if err != nil {
 					return err
 				}
 				interval = parsed
+
+				// Parse duration (e.g., "7d", "1w", "30d", "1m")
+				if habitDuration != "" {
+					dur, err := parseDuration(habitDuration)
+					if err != nil {
+						return fmt.Errorf("invalid duration: %w", err)
+					}
+					duration = &dur
+				}
+
+				// Set goal
+				if habitGoal > 0 {
+					goal = &habitGoal
+				}
 			}
 
 			res, err := svc.CreateTask(ctx, engine.CreateTaskInput{
@@ -81,6 +100,8 @@ func newAddCmd() *cobra.Command {
 				ParentID:      parent,
 				IsHabit:       isHabit,
 				HabitInterval: interval,
+				HabitDuration: duration,
+				HabitGoal:     goal,
 			})
 			if err != nil {
 				return err
@@ -101,6 +122,9 @@ func newAddCmd() *cobra.Command {
 			if res.ProjectActivated {
 				line += " " + ui.Gold.Render("⚡ project activated")
 			}
+			if goal != nil {
+				line += " " + ui.Muted.Render(fmt.Sprintf("[0/%d]", *goal))
+			}
 			fmt.Fprintln(cmd.OutOrStdout(), line)
 			return nil
 		},
@@ -111,7 +135,36 @@ func newAddCmd() *cobra.Command {
 	cmd.Flags().Int64VarP(&parentID, "parent", "p", 0, "Parent task ID (subtasks/projects)")
 	cmd.Flags().BoolVar(&isProject, "project", false, "Create a project container (requires unlock)")
 	cmd.Flags().BoolVar(&isHabit, "habit", false, "Create a recurring habit (requires unlock)")
-	cmd.Flags().StringVar(&habitInterval, "interval", "daily", "Habit interval (daily|weekly)")
+	cmd.Flags().StringVar(&habitInterval, "interval", "daily", "Habit interval (daily|weekly|monthly)")
+	cmd.Flags().StringVar(&habitDuration, "duration", "", "Habit duration (e.g., 7d, 1w, 30d, 1m)")
+	cmd.Flags().IntVar(&habitGoal, "goal", 0, "Target completions to finish the habit")
 
 	return cmd
+}
+
+// parseDuration parses a duration string like "7d", "1w", "30d", "1m"
+func parseDuration(s string) (time.Duration, error) {
+	if len(s) < 2 {
+		return 0, fmt.Errorf("duration too short: %s", s)
+	}
+	unit := s[len(s)-1]
+	numStr := s[:len(s)-1]
+	var num int
+	if _, err := fmt.Sscanf(numStr, "%d", &num); err != nil {
+		return 0, fmt.Errorf("invalid number in duration: %s", s)
+	}
+	if num <= 0 {
+		return 0, fmt.Errorf("duration must be positive: %s", s)
+	}
+
+	switch unit {
+	case 'd':
+		return time.Duration(num) * 24 * time.Hour, nil
+	case 'w':
+		return time.Duration(num) * 7 * 24 * time.Hour, nil
+	case 'm':
+		return time.Duration(num) * 30 * 24 * time.Hour, nil // Approximate month
+	default:
+		return 0, fmt.Errorf("unknown duration unit: %c (use d/w/m)", unit)
+	}
 }
