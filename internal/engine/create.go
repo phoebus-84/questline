@@ -10,15 +10,17 @@ import (
 type CreateTaskInput struct {
 	Title         string
 	Difficulty    Difficulty
-	Attribute     Attribute
+	Attribute     Attribute         // Primary attribute (backward compat)
+	Attributes    map[Attribute]int // Multi-attribute weights (e.g., {STR: 50, INT: 50})
 	ParentID      *int64
 	IsHabit       bool
 	HabitInterval HabitInterval
 }
 
 type CreateProjectInput struct {
-	Title     string
-	Attribute Attribute
+	Title      string
+	Attribute  Attribute
+	Attributes map[Attribute]int
 }
 
 type CreateResult struct {
@@ -53,6 +55,15 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (*Cr
 		attr = DefaultAttribute
 	}
 
+	// Convert map[Attribute]int to map[string]int for storage
+	var attrs map[string]int
+	if len(in.Attributes) > 0 {
+		attrs = make(map[string]int)
+		for a, w := range in.Attributes {
+			attrs[string(a)] = w
+		}
+	}
+
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
 		ParentID:      nil,
 		Title:         title,
@@ -61,6 +72,7 @@ func (s *Service) CreateProject(ctx context.Context, in CreateProjectInput) (*Cr
 		DueDate:       nil,
 		Difficulty:    int(DifficultyTrivial),
 		Attribute:     string(attr),
+		Attributes:    attrs,
 		XPValue:       0,
 		IsProject:     true,
 		IsHabit:       false,
@@ -132,6 +144,7 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		attr = DefaultAttribute
 	}
 
+	// For XP calculation, use the primary attribute's level
 	attrXP := playerXPForAttribute(p, attr)
 	attrLevel := AttributeLevelForXP(attrXP)
 	xpValue, err := CalculateXP(in.Difficulty, attrLevel)
@@ -150,6 +163,15 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		habitInterval = &v
 	}
 
+	// Convert map[Attribute]int to map[string]int for storage
+	var attrs map[string]int
+	if len(in.Attributes) > 0 {
+		attrs = make(map[string]int)
+		for a, w := range in.Attributes {
+			attrs[string(a)] = w
+		}
+	}
+
 	id, err := s.tasks.Insert(ctx, storage.TaskInsert{
 		ParentID:      parentID,
 		Title:         title,
@@ -158,6 +180,7 @@ func (s *Service) CreateTask(ctx context.Context, in CreateTaskInput) (*CreateRe
 		DueDate:       nil,
 		Difficulty:    int(in.Difficulty),
 		Attribute:     string(attr),
+		Attributes:    attrs,
 		XPValue:       xpValue,
 		IsProject:     false,
 		IsHabit:       in.IsHabit,

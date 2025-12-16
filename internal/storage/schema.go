@@ -36,6 +36,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 
 			difficulty INTEGER DEFAULT 1,
 			attribute TEXT NOT NULL,
+			attributes TEXT,
 			xp_value INTEGER NOT NULL,
 
 			is_project INTEGER DEFAULT 0,
@@ -75,6 +76,8 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		`ALTER TABLE player ADD COLUMN xp_read INTEGER DEFAULT 0;`,
 		`ALTER TABLE player ADD COLUMN xp_cinema INTEGER DEFAULT 0;`,
 		`ALTER TABLE player ADD COLUMN xp_career INTEGER DEFAULT 0;`,
+		// Multi-attribute support for tasks
+		`ALTER TABLE tasks ADD COLUMN attributes TEXT;`,
 	}
 	for _, stmt := range alterStmts {
 		_, err := db.ExecContext(ctx, stmt)

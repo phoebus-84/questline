@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -23,6 +24,7 @@ type TaskInsert struct {
 	DueDate       *time.Time
 	Difficulty    int
 	Attribute     string
+	Attributes    map[string]int // Multi-attribute weights (JSON)
 	XPValue       int
 	IsProject     bool
 	IsHabit       bool
@@ -30,14 +32,24 @@ type TaskInsert struct {
 }
 
 func (r *TaskRepo) Insert(ctx context.Context, in TaskInsert) (int64, error) {
+	var attrsJSON *string
+	if len(in.Attributes) > 0 {
+		data, err := json.Marshal(in.Attributes)
+		if err != nil {
+			return 0, fmt.Errorf("marshal attributes: %w", err)
+		}
+		s := string(data)
+		attrsJSON = &s
+	}
+
 	res, err := r.db.ExecContext(ctx, `
 		INSERT INTO tasks (
 			parent_id, title, description,
 			status, due_date,
-			difficulty, attribute, xp_value,
+			difficulty, attribute, attributes, xp_value,
 			is_project, is_habit, habit_interval
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, in.ParentID, in.Title, in.Description, in.Status, in.DueDate, in.Difficulty, in.Attribute, in.XPValue, boolToInt(in.IsProject), boolToInt(in.IsHabit), in.HabitInterval)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, in.ParentID, in.Title, in.Description, in.Status, in.DueDate, in.Difficulty, in.Attribute, attrsJSON, in.XPValue, boolToInt(in.IsProject), boolToInt(in.IsHabit), in.HabitInterval)
 	if err != nil {
 		return 0, fmt.Errorf("task insert: %w", err)
 	}
@@ -51,7 +63,7 @@ func (r *TaskRepo) Insert(ctx context.Context, in TaskInsert) (int64, error) {
 func (r *TaskRepo) Get(ctx context.Context, id int64) (*Task, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
 		FROM tasks
 		WHERE id = ?
 	`, id)
@@ -62,7 +74,7 @@ func (r *TaskRepo) Get(ctx context.Context, id int64) (*Task, error) {
 func (r *TaskRepo) ListAll(ctx context.Context) ([]Task, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
 		FROM tasks
 		ORDER BY id ASC
 	`)
@@ -88,7 +100,7 @@ func (r *TaskRepo) ListAll(ctx context.Context) ([]Task, error) {
 func (r *TaskRepo) ListChildren(ctx context.Context, parentID int64) ([]Task, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, parent_id, title, description, status, created_at, completed_at, due_date,
-			difficulty, attribute, xp_value, is_project, is_habit, habit_interval
+			difficulty, attribute, attributes, xp_value, is_project, is_habit, habit_interval
 		FROM tasks
 		WHERE parent_id = ?
 		ORDER BY id ASC
@@ -188,6 +200,7 @@ func scanTaskRow(row scanner) (*Task, error) {
 		dueDate       sql.NullTime
 		difficulty    int
 		attribute     string
+		attributesRaw sql.NullString
 		xpValue       int
 		isProject     int
 		isHabit       int
@@ -196,7 +209,7 @@ func scanTaskRow(row scanner) (*Task, error) {
 
 	if err := row.Scan(
 		&id, &parent, &title, &description, &status, &createdAt, &completedAt, &dueDate,
-		&difficulty, &attribute, &xpValue, &isProject, &isHabit, &habitInterval,
+		&difficulty, &attribute, &attributesRaw, &xpValue, &isProject, &isHabit, &habitInterval,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -230,6 +243,14 @@ func scanTaskRow(row scanner) (*Task, error) {
 		interval = &v
 	}
 
+	// Parse attributes JSON
+	var attrs map[string]int
+	if attributesRaw.Valid && attributesRaw.String != "" {
+		if err := json.Unmarshal([]byte(attributesRaw.String), &attrs); err != nil {
+			return nil, fmt.Errorf("unmarshal attributes: %w", err)
+		}
+	}
+
 	return &Task{
 		ID:            id,
 		ParentID:      parentID,
@@ -241,6 +262,7 @@ func scanTaskRow(row scanner) (*Task, error) {
 		DueDate:       due,
 		Difficulty:    difficulty,
 		Attribute:     attribute,
+		Attributes:    attrs,
 		XPValue:       xpValue,
 		IsProject:     isProject != 0,
 		IsHabit:       isHabit != 0,

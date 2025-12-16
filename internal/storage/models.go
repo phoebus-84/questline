@@ -29,7 +29,8 @@ type Task struct {
 	CompletedAt   *time.Time
 	DueDate       *time.Time
 	Difficulty    int
-	Attribute     string
+	Attribute     string            // Primary attribute (backward compat)
+	Attributes    map[string]int    // Multi-attribute weights (e.g., {"STR": 50, "INT": 50})
 	XPValue       int
 	IsProject     bool
 	IsHabit       bool

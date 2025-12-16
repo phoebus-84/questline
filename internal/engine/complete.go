@@ -55,6 +55,43 @@ func addAttributeXP(p *storage.Player, attr Attribute, xp int) {
 	}
 }
 
+// distributeXP distributes total XP across attributes based on weights.
+// If no weights provided (or empty), uses the primary attribute only.
+// Weights are percentages (e.g., {STR: 50, INT: 50} means 50% each).
+func distributeXP(p *storage.Player, totalXP int, primaryAttr Attribute, weights map[string]int) {
+	if len(weights) == 0 {
+		// Single attribute mode - all XP goes to primary
+		addAttributeXP(p, primaryAttr, totalXP)
+		return
+	}
+
+	// Calculate total weight
+	totalWeight := 0
+	for _, w := range weights {
+		totalWeight += w
+	}
+	if totalWeight == 0 {
+		addAttributeXP(p, primaryAttr, totalXP)
+		return
+	}
+
+	// Distribute XP proportionally
+	distributed := 0
+	var lastAttr Attribute
+	for attrStr, weight := range weights {
+		attr := parseStoredAttribute(attrStr)
+		share := (totalXP * weight) / totalWeight
+		addAttributeXP(p, attr, share)
+		distributed += share
+		lastAttr = attr
+	}
+
+	// Give any remainder (from integer division) to the last attribute
+	if remainder := totalXP - distributed; remainder > 0 {
+		addAttributeXP(p, lastAttr, remainder)
+	}
+}
+
 func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, error) {
 	p, err := s.getPlayer(ctx)
 	if err != nil {
@@ -115,7 +152,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		}
 
 		p.XPTotal += xp
-		addAttributeXP(p, attr, xp)
+		distributeXP(p, xp, attr, task.Attributes)
 		p.Level = LevelForTotalXP(p.XPTotal)
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
@@ -159,7 +196,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 		}
 
 		p.XPTotal += bonus
-		addAttributeXP(p, attr, bonus)
+		distributeXP(p, bonus, attr, task.Attributes)
 		p.Level = LevelForTotalXP(p.XPTotal)
 		if err := s.players.Update(ctx, p); err != nil {
 			return nil, err
@@ -200,7 +237,7 @@ func (s *Service) CompleteTask(ctx context.Context, id int64) (*CompleteResult, 
 	}
 
 	p.XPTotal += xp
-	addAttributeXP(p, attr, xp)
+	distributeXP(p, xp, attr, task.Attributes)
 	p.Level = LevelForTotalXP(p.XPTotal)
 	if err := s.players.Update(ctx, p); err != nil {
 		return nil, err

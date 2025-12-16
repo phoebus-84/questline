@@ -37,7 +37,7 @@ func newAddCmd() *cobra.Command {
 			defer cleanup()
 
 			title := args[0]
-			attrParsed := engine.ParseAttribute(attr)
+			primaryAttr, attrWeights := engine.ParseAttributes(attr)
 
 			var parent *int64
 			if parentID != 0 {
@@ -46,7 +46,11 @@ func newAddCmd() *cobra.Command {
 			}
 
 			if isProject {
-				res, err := svc.CreateProject(ctx, engine.CreateProjectInput{Title: title, Attribute: attrParsed})
+				res, err := svc.CreateProject(ctx, engine.CreateProjectInput{
+					Title:      title,
+					Attribute:  primaryAttr,
+					Attributes: attrWeights,
+				})
 				if err != nil {
 					return err
 				}
@@ -72,7 +76,8 @@ func newAddCmd() *cobra.Command {
 			res, err := svc.CreateTask(ctx, engine.CreateTaskInput{
 				Title:         title,
 				Difficulty:    d,
-				Attribute:     attrParsed,
+				Attribute:     primaryAttr,
+				Attributes:    attrWeights,
 				ParentID:      parent,
 				IsHabit:       isHabit,
 				HabitInterval: interval,
@@ -102,7 +107,7 @@ func newAddCmd() *cobra.Command {
 	}
 
 	cmd.Flags().IntVarP(&diff, "diff", "d", 1, "Difficulty (1-5)")
-	cmd.Flags().StringVarP(&attr, "attr", "a", "wis", "Attribute (str|int|wis|art|home|out|read|cinema|career)")
+	cmd.Flags().StringVarP(&attr, "attr", "a", "wis", "Attribute(s): single (str) or multi (str:50,int:50)")
 	cmd.Flags().Int64VarP(&parentID, "parent", "p", 0, "Parent task ID (subtasks/projects)")
 	cmd.Flags().BoolVar(&isProject, "project", false, "Create a project container (requires unlock)")
 	cmd.Flags().BoolVar(&isHabit, "habit", false, "Create a recurring habit (requires unlock)")
