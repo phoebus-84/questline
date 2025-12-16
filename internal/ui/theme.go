@@ -23,6 +23,7 @@ const (
 	IconBox     = "📦"
 	IconLoop    = "🔁"
 	IconScroll  = "📜"
+	IconUndo    = "↩️"
 )
 
 // Retro terminal colors (phosphor green/amber CRT aesthetic)

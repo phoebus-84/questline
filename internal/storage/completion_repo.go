@@ -139,3 +139,12 @@ func (r *CompletionRepo) XPByDay(ctx context.Context, since, until time.Time) (m
 	}
 	return result, nil
 }
+
+// Delete removes a completion record by ID.
+func (r *CompletionRepo) Delete(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM task_completions WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("completion delete: %w", err)
+	}
+	return nil
+}

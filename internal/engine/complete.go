@@ -352,3 +352,148 @@ func (s *Service) ProjectHP(ctx context.Context, projectID int64) (int, error) {
 
 	return remaining, nil
 }
+
+// RestoreResult holds the result of restoring a task completion.
+type RestoreResult struct {
+	TaskID      int64
+	XPDeducted  int
+	LevelBefore int
+	LevelAfter  int
+	LevelDown   bool
+}
+
+// RestoreTask undoes the last completion for a task:
+// 1. Finds and deletes the last completion record
+// 2. Deducts the XP from the player (total and attribute-specific)
+// 3. Resets the task status to "pending"
+func (s *Service) RestoreTask(ctx context.Context, id int64) (*RestoreResult, error) {
+	p, err := s.getPlayer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	levelBefore := p.Level
+
+	task, err := s.tasks.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, fmt.Errorf("task %d not found", id)
+	}
+
+	// Get the last completion for this task
+	lastComp, err := s.completions.Last(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if lastComp == nil {
+		return nil, fmt.Errorf("task %d has no completions to restore", id)
+	}
+
+	xp := lastComp.XPAwarded
+
+	// Deduct XP from total
+	p.XPTotal -= xp
+	if p.XPTotal < 0 {
+		p.XPTotal = 0
+	}
+
+	// Deduct XP from the appropriate attribute
+	attr := parseStoredAttribute(task.Attribute)
+	if len(task.Attributes) > 0 {
+		// If task had multiple attributes, deduct proportionally
+		totalWeight := 0
+		for _, w := range task.Attributes {
+			totalWeight += w
+		}
+		if totalWeight > 0 {
+			for attrStr, weight := range task.Attributes {
+				a := parseStoredAttribute(attrStr)
+				share := (xp * weight) / totalWeight
+				deductAttributeXP(p, a, share)
+			}
+		}
+	} else {
+		// Single attribute mode
+		deductAttributeXP(p, attr, xp)
+	}
+
+	// Recalculate level
+	p.Level = LevelForTotalXP(p.XPTotal)
+
+	// Update player
+	if err := s.players.Update(ctx, p); err != nil {
+		return nil, err
+	}
+
+	// Delete the completion record
+	if err := s.completions.Delete(ctx, lastComp.ID); err != nil {
+		return nil, err
+	}
+
+	// Reset task status to pending
+	if err := s.tasks.ResetToPending(ctx, id); err != nil {
+		return nil, err
+	}
+
+	return &RestoreResult{
+		TaskID:      id,
+		XPDeducted:  xp,
+		LevelBefore: levelBefore,
+		LevelAfter:  p.Level,
+		LevelDown:   p.Level < levelBefore,
+	}, nil
+}
+
+// deductAttributeXP removes XP from the appropriate attribute on the player.
+func deductAttributeXP(p *storage.Player, attr Attribute, xp int) {
+	switch attr {
+	case AttributeSTR:
+		p.XPStr -= xp
+		if p.XPStr < 0 {
+			p.XPStr = 0
+		}
+	case AttributeINT:
+		p.XPInt -= xp
+		if p.XPInt < 0 {
+			p.XPInt = 0
+		}
+	case AttributeART:
+		p.XPArt -= xp
+		if p.XPArt < 0 {
+			p.XPArt = 0
+		}
+	case AttributeHOME:
+		p.XPHome -= xp
+		if p.XPHome < 0 {
+			p.XPHome = 0
+		}
+	case AttributeOUT:
+		p.XPOut -= xp
+		if p.XPOut < 0 {
+			p.XPOut = 0
+		}
+	case AttributeREAD:
+		p.XPRead -= xp
+		if p.XPRead < 0 {
+			p.XPRead = 0
+		}
+	case AttributeCINEMA:
+		p.XPCinema -= xp
+		if p.XPCinema < 0 {
+			p.XPCinema = 0
+		}
+	case AttributeCAREER:
+		p.XPCareer -= xp
+		if p.XPCareer < 0 {
+			p.XPCareer = 0
+		}
+	case AttributeWIS:
+		fallthrough
+	default:
+		p.XPWis -= xp
+		if p.XPWis < 0 {
+			p.XPWis = 0
+		}
+	}
+}

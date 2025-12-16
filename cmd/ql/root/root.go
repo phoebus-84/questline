@@ -26,6 +26,7 @@ func Execute() {
 	rootCmd.AddCommand(
 		newAddCmd(),
 		newDoCmd(),
+		newRestoreCmd(),
 		newListCmd(),
 		newStatusCmd(),
 		newAcceptCmd(),

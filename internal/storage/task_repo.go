@@ -159,6 +159,15 @@ func (r *TaskRepo) UpdateDifficultyAndXP(ctx context.Context, id int64, difficul
 	return nil
 }
 
+// ResetToPending resets a task status to pending and clears completed_at.
+func (r *TaskRepo) ResetToPending(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'pending', completed_at = NULL WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("task reset to pending: %w", err)
+	}
+	return nil
+}
+
 func (r *TaskRepo) HasCompletedProjectTitle(ctx context.Context, title string) (bool, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT 1
