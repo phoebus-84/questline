@@ -57,3 +57,24 @@ func (r *BlueprintRepo) ListByStatus(ctx context.Context, status string) ([]Blue
 	}
 	return out, nil
 }
+
+func (r *BlueprintRepo) ListAll(ctx context.Context) ([]Blueprint, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT code, status FROM blueprints ORDER BY code ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("blueprint list all: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Blueprint
+	for rows.Next() {
+		var b Blueprint
+		if err := rows.Scan(&b.Code, &b.Status); err != nil {
+			return nil, fmt.Errorf("blueprint scan: %w", err)
+		}
+		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("blueprint rows: %w", err)
+	}
+	return out, nil
+}

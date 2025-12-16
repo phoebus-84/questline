@@ -98,3 +98,44 @@ func (r *CompletionRepo) ListByTask(ctx context.Context, taskID int64) ([]TaskCo
 	}
 	return out, nil
 }
+
+// ListInRange returns all completions between since and until (inclusive).
+func (r *CompletionRepo) ListInRange(ctx context.Context, since, until time.Time) ([]TaskCompletion, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, task_id, completed_at, difficulty, xp_awarded
+		FROM task_completions
+		WHERE completed_at >= ? AND completed_at <= ?
+		ORDER BY completed_at ASC
+	`, since, until)
+	if err != nil {
+		return nil, fmt.Errorf("completion list in range: %w", err)
+	}
+	defer rows.Close()
+
+	var out []TaskCompletion
+	for rows.Next() {
+		var tc TaskCompletion
+		if err := rows.Scan(&tc.ID, &tc.TaskID, &tc.CompletedAt, &tc.Difficulty, &tc.XPAwarded); err != nil {
+			return nil, fmt.Errorf("completion scan: %w", err)
+		}
+		out = append(out, tc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("completion rows: %w", err)
+	}
+	return out, nil
+}
+
+// XPByDay returns a map of date (YYYY-MM-DD) to total XP earned that day.
+func (r *CompletionRepo) XPByDay(ctx context.Context, since, until time.Time) (map[string]int, error) {
+	completions, err := r.ListInRange(ctx, since, until)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int)
+	for _, c := range completions {
+		day := c.CompletedAt.Format("2006-01-02")
+		result[day] += c.XPAwarded
+	}
+	return result, nil
+}

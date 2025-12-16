@@ -18,6 +18,14 @@ import (
 	"questline/internal/ui"
 )
 
+// Panel focus states
+type panelFocus int
+
+const (
+	focusQuests panelFocus = iota
+	focusFocus
+)
+
 type boardModel struct {
 	ctx context.Context
 	svc *engine.Service
@@ -28,16 +36,30 @@ type boardModel struct {
 	player *storage.Player
 	tasks  []storage.Task
 
+	// XP history for graphs
+	weeklyXP  []int // XP per day for last 7 days
+	monthlyXP []int // XP per week for last 4 weeks
+
+	// Achievements
+	achievements []engine.Achievement
+
 	expanded map[int64]bool
 	selected int
+	focus    panelFocus
 
 	help    help.Model
 	keys    keyMap
 	spinner spinner.Model
 
-	lastLog string
-	loading bool
-	err     error
+	lastLog   string
+	loading   bool
+	err       error
+	showHelp  bool
+	compactUI bool // for small terminals
+
+	// Confirmation state
+	confirmDelete bool
+	deleteTaskID  int64
 }
 
 type keyMap struct {
@@ -45,18 +67,32 @@ type keyMap struct {
 	Down     key.Binding
 	Toggle   key.Binding
 	Complete key.Binding
+	Delete   key.Binding
 	Refresh  key.Binding
+	Tab      key.Binding
+	Help     key.Binding
 	Quit     key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.Complete, k.Refresh, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Complete, k.Delete, k.Refresh, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.Toggle},
+		{k.Complete, k.Delete, k.Refresh, k.Tab},
+		{k.Help, k.Quit},
+	}
 }
 
 type loadedMsg struct {
-	player *storage.Player
-	tasks  []storage.Task
-	err    error
+	player       *storage.Player
+	tasks        []storage.Task
+	weeklyXP     []int
+	monthlyXP    []int
+	achievements []engine.Achievement
+	err          error
 }
 
 type completedMsg struct {
@@ -65,24 +101,33 @@ type completedMsg struct {
 	err error
 }
 
+type deletedMsg struct {
+	id  int64
+	err error
+}
+
 func newBoardModel(ctx context.Context, svc *engine.Service) boardModel {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
-	sp.Style = ui.Muted
+	sp.Style = ui.Terminal
 
 	return boardModel{
 		ctx:      ctx,
 		svc:      svc,
 		expanded: map[int64]bool{},
 		loading:  true,
-		lastLog:  "Loaded.",
+		lastLog:  "System initialized.",
 		help:     help.New(),
 		spinner:  sp,
+		focus:    focusQuests,
 		keys: keyMap{
-			Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "move")),
-			Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "move")),
-			Toggle:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "expand")),
-			Complete: key.NewBinding(key.WithKeys("c", "space"), key.WithHelp("c/space", "complete")),
+			Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+			Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+			Toggle:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("⏎", "expand")),
+			Complete: key.NewBinding(key.WithKeys("c", "space"), key.WithHelp("c/␣", "complete")),
+			Delete:   key.NewBinding(key.WithKeys("d", "backspace"), key.WithHelp("d/⌫", "delete")),
 			Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
+			Tab:      key.NewBinding(key.WithKeys("tab"), key.WithHelp("⇥", "switch panel")),
+			Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 			Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 		},
 	}
@@ -102,7 +147,38 @@ func (m boardModel) loadCmd() tea.Cmd {
 		if err != nil {
 			return loadedMsg{err: err}
 		}
-		return loadedMsg{player: p, tasks: tasks}
+
+		// Load XP history for graphs
+		now := time.Now()
+		weeklyXP := make([]int, 7)
+		monthlyXP := make([]int, 4)
+
+		// Get XP by day for the last 7 days
+		for i := 0; i < 7; i++ {
+			day := now.AddDate(0, 0, -6+i)
+			dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location())
+			dayEnd := dayStart.AddDate(0, 0, 1).Add(-time.Second)
+			xpMap, _ := m.svc.CompletionRepo().XPByDay(m.ctx, dayStart, dayEnd)
+			for _, xp := range xpMap {
+				weeklyXP[i] += xp
+			}
+		}
+
+		// Get XP by week for the last 4 weeks
+		for i := 0; i < 4; i++ {
+			weekStart := now.AddDate(0, 0, -7*(4-i-1)-int(now.Weekday()))
+			weekStart = time.Date(weekStart.Year(), weekStart.Month(), weekStart.Day(), 0, 0, 0, 0, weekStart.Location())
+			weekEnd := weekStart.AddDate(0, 0, 7).Add(-time.Second)
+			xpMap, _ := m.svc.CompletionRepo().XPByDay(m.ctx, weekStart, weekEnd)
+			for _, xp := range xpMap {
+				monthlyXP[i] += xp
+			}
+		}
+
+		// Load achievements
+		achievements, _ := engine.GetAchievementsForPlayer(m.ctx, m.svc)
+
+		return loadedMsg{player: p, tasks: tasks, weeklyXP: weeklyXP, monthlyXP: monthlyXP, achievements: achievements}
 	}
 }
 
@@ -113,11 +189,20 @@ func (m boardModel) completeCmd(id int64) tea.Cmd {
 	}
 }
 
+func (m boardModel) deleteCmd(id int64) tea.Cmd {
+	return func() tea.Msg {
+		err := m.svc.TaskRepo().Delete(m.ctx, id)
+		return deletedMsg{id: id, err: err}
+	}
+}
+
 func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.compactUI = m.width < 80 || m.height < 24
+		m.help.Width = m.width
 		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -127,11 +212,14 @@ func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.err = msg.err
 		if msg.err != nil {
-			m.lastLog = "Load failed: " + msg.err.Error()
+			m.lastLog = "ERROR: " + msg.err.Error()
 			return m, nil
 		}
 		m.player = msg.player
 		m.tasks = msg.tasks
+		m.weeklyXP = msg.weeklyXP
+		m.monthlyXP = msg.monthlyXP
+		m.achievements = msg.achievements
 		// Default-expand roots that have children.
 		children := indexChildren(m.tasks)
 		for _, t := range m.tasks {
@@ -139,22 +227,60 @@ func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.expanded[t.ID] = true
 			}
 		}
-		m.lastLog = fmt.Sprintf("Refreshed at %s.", time.Now().Format("15:04:05"))
+		m.lastLog = fmt.Sprintf("Data loaded @ %s", time.Now().Format("15:04:05"))
 		return m, nil
 	case completedMsg:
 		if msg.err != nil {
-			m.lastLog = "Complete failed: " + msg.err.Error()
+			m.lastLog = "ERROR: " + msg.err.Error()
 			return m, nil
 		}
-		m.lastLog = fmt.Sprintf("Completed %d: +%d XP (level %d → %d)", msg.res.TaskID, msg.res.XPAwarded, msg.res.LevelBefore, msg.res.LevelAfter)
+		levelMsg := ""
+		if msg.res.LevelAfter > msg.res.LevelBefore {
+			levelMsg = fmt.Sprintf(" ▲▲▲ LEVEL UP! %d → %d ▲▲▲", msg.res.LevelBefore, msg.res.LevelAfter)
+		}
+		m.lastLog = fmt.Sprintf("✓ Task #%d complete: +%d XP%s", msg.res.TaskID, msg.res.XPAwarded, levelMsg)
+		return m, m.loadCmd()
+	case deletedMsg:
+		m.confirmDelete = false
+		m.deleteTaskID = 0
+		if msg.err != nil {
+			m.lastLog = "ERROR: " + msg.err.Error()
+			return m, nil
+		}
+		m.lastLog = fmt.Sprintf("✗ Task #%d deleted", msg.id)
 		return m, m.loadCmd()
 	case tea.KeyMsg:
+		// Handle confirmation mode
+		if m.confirmDelete {
+			switch msg.String() {
+			case "y", "Y":
+				m.lastLog = fmt.Sprintf("Deleting task #%d...", m.deleteTaskID)
+				return m, m.deleteCmd(m.deleteTaskID)
+			case "n", "N", "escape":
+				m.confirmDelete = false
+				m.deleteTaskID = 0
+				m.lastLog = "Delete cancelled"
+				return m, nil
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "?":
+			m.showHelp = !m.showHelp
+			return m, nil
+		case "tab":
+			if m.focus == focusQuests {
+				m.focus = focusFocus
+			} else {
+				m.focus = focusQuests
+			}
+			return m, nil
 		case "r":
 			m.loading = true
-			m.lastLog = "Refreshing…"
+			m.lastLog = "Refreshing..."
 			return m, m.loadCmd()
 		case "up", "k":
 			if m.selected > 0 {
@@ -185,7 +311,7 @@ func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			line := lines[m.selected]
 			if line.isProject {
-				m.lastLog = "Select a leaf task/habit to complete."
+				m.lastLog = "Cannot complete project directly. Complete its tasks first."
 				return m, nil
 			}
 			// Only complete non-done leaf tasks/habits.
@@ -195,11 +321,27 @@ func (m boardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if t.Status == "done" {
-				m.lastLog = "Already done."
+				m.lastLog = "Already completed."
 				return m, nil
 			}
-			m.lastLog = fmt.Sprintf("Completing %d…", t.ID)
+			m.lastLog = fmt.Sprintf("Completing task #%d...", t.ID)
 			return m, m.completeCmd(t.ID)
+		case "d", "backspace":
+			lines := m.questLines()
+			if m.selected < 0 || m.selected >= len(lines) {
+				return m, nil
+			}
+			line := lines[m.selected]
+			t := findTask(m.tasks, line.id)
+			if t == nil {
+				m.lastLog = "Task not found."
+				return m, nil
+			}
+			// Ask for confirmation
+			m.confirmDelete = true
+			m.deleteTaskID = t.ID
+			m.lastLog = fmt.Sprintf("Delete task #%d '%s'? (y/n)", t.ID, truncate(t.Title, 20))
+			return m, nil
 		}
 	}
 	return m, nil
@@ -267,114 +409,286 @@ func (m boardModel) questLines() []questLine {
 
 func (m boardModel) View() string {
 	if m.err != nil {
-		return ui.Bad.Render(ui.IconError+" Error") + ": " + m.err.Error() + "\n\nPress q to quit.\n"
+		return ui.Bad.Render("█ ERROR █") + "\n\n" + m.err.Error() + "\n\nPress q to quit.\n"
 	}
 
-	header := m.renderHeader()
-	footer := m.renderFooter()
-
-	leftW := 30
-	if m.width > 0 {
-		maxLeft := (m.width - 2) / 2
-		if maxLeft < leftW {
-			leftW = maxLeft
-		}
-		if leftW < 22 {
-			leftW = 22
-		}
+	// Calculate dimensions
+	w := m.width
+	h := m.height
+	if w == 0 {
+		w = 80
+	}
+	if h == 0 {
+		h = 24
 	}
 
-	rightW := 0
-	if m.width > 0 {
-		rightW = m.width - leftW - 2
-		if rightW < 20 {
-			rightW = 20
-		}
+	// Header takes ~3 lines, footer ~2 lines
+	headerH := 3
+	footerH := 2
+	bodyH := h - headerH - footerH
+	if bodyH < 10 {
+		bodyH = 10
 	}
 
-	left := ui.Panel.Width(leftW).Render(m.renderSidebar())
-	right := ui.Panel.Render(m.renderMain())
-	if rightW > 0 {
-		right = ui.Panel.Width(rightW).Render(m.renderMain())
+	// Render components
+	header := m.renderHeader(w)
+	footer := m.renderFooter(w)
+
+	// Calculate panel widths
+	sidebarW := 28
+	if w < 100 {
+		sidebarW = 24
+	}
+	if w < 80 {
+		sidebarW = 20
+	}
+	mainW := w - sidebarW - 4 // borders + padding
+	if mainW < 30 {
+		mainW = 30
 	}
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	return header + "\n" + body + "\n" + footer
+	// Render panels with proper heights
+	panelH := bodyH - 2 // border space
+
+	sidebar := m.renderSidebar(sidebarW, panelH)
+	main := m.renderMain(mainW, panelH)
+
+	// Style panels with retro borders
+	sidebarStyle := lipgloss.NewStyle().
+		Width(sidebarW).
+		Height(panelH).
+		BorderStyle(lipgloss.DoubleBorder()).
+		BorderForeground(ui.TerminalDim.GetForeground()).
+		Padding(0, 1)
+
+	mainStyle := lipgloss.NewStyle().
+		Width(mainW).
+		Height(panelH).
+		BorderStyle(lipgloss.DoubleBorder()).
+		BorderForeground(ui.TerminalDim.GetForeground()).
+		Padding(0, 1)
+
+	sidePanel := sidebarStyle.Render(sidebar)
+	mainPanel := mainStyle.Render(main)
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top, sidePanel, mainPanel)
+
+	// Full screen layout
+	return lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 }
 
-func (m boardModel) renderHeader() string {
+func (m boardModel) renderHeader(w int) string {
 	if m.player == nil {
-		return ui.Heading(ui.IconQuest, "Questline") + " " + ui.Muted.Render(m.spinner.View()+" loading…")
+		title := ui.TerminalBold.Render("▓▓▓ QUESTLINE ▓▓▓")
+		return title + " " + ui.Terminal.Render(m.spinner.View()+" LOADING...")
 	}
+
 	lvl := engine.LevelForTotalXP(m.player.XPTotal)
-	bar := progressBarStyled(
-		m.player.XPTotal-engine.XPRequiredForLevel(lvl),
-		engine.XPRequiredForLevel(lvl+1)-engine.XPRequiredForLevel(lvl),
-		30,
+	curXP := m.player.XPTotal - engine.XPRequiredForLevel(lvl)
+	needXP := engine.XPRequiredForLevel(lvl+1) - engine.XPRequiredForLevel(lvl)
+
+	// Build header line
+	title := ui.Gold.Render("▓▓▓ QUESTLINE ▓▓▓")
+
+	// Stats in terminal style
+	stats := fmt.Sprintf("%s %s  %s %s  %s %d/%d",
+		ui.TerminalDim.Render("LVL"),
+		ui.TerminalBold.Render(fmt.Sprintf("%d", lvl)),
+		ui.TerminalDim.Render("XP"),
+		ui.Terminal.Render(fmt.Sprintf("%d", m.player.XPTotal)),
+		ui.TerminalDim.Render("NEXT"),
+		curXP,
+		needXP,
 	)
-	left := ui.Heading(ui.IconQuest, "Questline")
-	right := fmt.Sprintf("%s %s  %s %s  %s %d %s",
-		ui.Muted.Render("Player"), ui.Key.Render(m.player.Key),
-		ui.Muted.Render("Level"), ui.Key.Render(fmt.Sprintf("%d", lvl)),
-		ui.Muted.Render("XP"), m.player.XPTotal, bar,
-	)
-	if m.width > 0 {
-		gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-		if gap > 1 {
-			return left + strings.Repeat(" ", gap) + right
-		}
+
+	// XP bar
+	barW := 20
+	if w > 100 {
+		barW = 30
 	}
-	return left + "  " + right
+	bar := progressBarRetro(curXP, needXP, barW)
+
+	// Compose header
+	left := title
+	right := stats + " " + bar
+
+	gap := w - lipgloss.Width(left) - lipgloss.Width(right) - 2
+	if gap < 1 {
+		gap = 1
+	}
+
+	line1 := left + strings.Repeat(" ", gap) + right
+
+	// Separator line
+	sep := ui.TerminalDim.Render(strings.Repeat("─", w))
+
+	return line1 + "\n" + sep
 }
 
-func (m boardModel) renderSidebar() string {
+func (m boardModel) renderSidebar(w, h int) string {
 	if m.player == nil {
-		return ui.PanelTitle.Render("📊 Stats") + "\n\n" + ui.Muted.Render(m.spinner.View()+" loading…")
+		return ui.Gold.Render("◆ STATS ◆") + "\n\n" + ui.Terminal.Render(m.spinner.View()+" loading...")
 	}
-	lines := []string{ui.PanelTitle.Render("📊 Attributes")}
-	// Original 4 attributes
-	lines = append(lines, renderAttr("💪 STR", m.player.XPStr))
-	lines = append(lines, renderAttr("🧠 INT", m.player.XPInt))
-	lines = append(lines, renderAttr("🧘 WIS", m.player.XPWis))
-	lines = append(lines, renderAttr("🎨 ART", m.player.XPArt))
-	// New 5 attributes
-	lines = append(lines, renderAttr("🏠 HOME", m.player.XPHome))
-	lines = append(lines, renderAttr("🌲 OUT", m.player.XPOut))
-	lines = append(lines, renderAttr("📚 READ", m.player.XPRead))
-	lines = append(lines, renderAttr("🎬 CINEMA", m.player.XPCinema))
-	lines = append(lines, renderAttr("💼 CAREER", m.player.XPCareer))
+
+	var lines []string
+
+	// Attributes section
+	lines = append(lines, ui.Gold.Render("◆ ATTRIBUTES ◆"))
 	lines = append(lines, "")
-	lines = append(lines, ui.PanelTitle.Render("⌨️  Keys"))
-	lines = append(lines, ui.Muted.Render(m.help.ShortHelpView(m.keys.ShortHelp())))
+
+	barW := w - 14
+	if barW < 8 {
+		barW = 8
+	}
+
+	// All 9 attributes
+	attrs := []struct {
+		icon string
+		name string
+		xp   int
+	}{
+		{"💪", "STR", m.player.XPStr},
+		{"🧠", "INT", m.player.XPInt},
+		{"🧘", "WIS", m.player.XPWis},
+		{"🎨", "ART", m.player.XPArt},
+		{"🏠", "HOME", m.player.XPHome},
+		{"🌲", "OUT", m.player.XPOut},
+		{"📚", "READ", m.player.XPRead},
+		{"🎬", "CINE", m.player.XPCinema},
+		{"💼", "WORK", m.player.XPCareer},
+	}
+
+	for _, a := range attrs {
+		lines = append(lines, renderAttrRetro(a.icon, a.name, a.xp, barW))
+	}
+
+	// Stats section
+	lines = append(lines, "")
+	lines = append(lines, ui.Gold.Render("◆ STATS ◆"))
+	lines = append(lines, "")
+
+	// Count tasks
+	pending, done, habits := 0, 0, 0
+	for _, t := range m.tasks {
+		if t.IsHabit {
+			habits++
+		}
+		switch t.Status {
+		case "pending", "active", "planning":
+			pending++
+		case "done":
+			done++
+		}
+	}
+	lines = append(lines, fmt.Sprintf("%s %d", ui.TerminalDim.Render("Active:"), pending))
+	lines = append(lines, fmt.Sprintf("%s %d", ui.TerminalDim.Render("Done:  "), done))
+	lines = append(lines, fmt.Sprintf("%s %d", ui.TerminalDim.Render("Habits:"), habits))
+
+	// XP Graph section (weekly)
+	lines = append(lines, "")
+	lines = append(lines, ui.Gold.Render("◆ XP (7 DAYS) ◆"))
+	lines = append(lines, renderSparkGraph(m.weeklyXP, barW))
+
+	// Total XP this week
+	weekTotal := 0
+	for _, xp := range m.weeklyXP {
+		weekTotal += xp
+	}
+	lines = append(lines, ui.TerminalDim.Render(fmt.Sprintf("Total: %d XP", weekTotal)))
+
+	// Achievements section
+	lines = append(lines, "")
+	lines = append(lines, ui.Gold.Render("◆ BADGES ◆"))
+	earnedCount := 0
+	totalCount := len(m.achievements)
+	recentBadges := ""
+	for _, a := range m.achievements {
+		if a.Earned {
+			earnedCount++
+			if len(recentBadges) < barW {
+				recentBadges += a.Icon
+			}
+		}
+	}
+	if recentBadges == "" {
+		recentBadges = ui.TerminalDim.Render("(none yet)")
+	}
+	lines = append(lines, recentBadges)
+	lines = append(lines, ui.TerminalDim.Render(fmt.Sprintf("%d/%d earned", earnedCount, totalCount)))
+
+	// Keys help
+	lines = append(lines, "")
+	lines = append(lines, ui.Gold.Render("◆ KEYS ◆"))
+	if m.showHelp {
+		lines = append(lines, ui.TerminalDim.Render("↑↓/jk  navigate"))
+		lines = append(lines, ui.TerminalDim.Render("⏎      expand"))
+		lines = append(lines, ui.TerminalDim.Render("c/␣    complete"))
+		lines = append(lines, ui.TerminalDim.Render("d/⌫    delete"))
+		lines = append(lines, ui.TerminalDim.Render("r      refresh"))
+		lines = append(lines, ui.TerminalDim.Render("?      toggle help"))
+		lines = append(lines, ui.TerminalDim.Render("q      quit"))
+	} else {
+		lines = append(lines, ui.TerminalDim.Render("? for help"))
+	}
+
 	return strings.Join(lines, "\n")
 }
 
-func (m boardModel) renderMain() string {
+func (m boardModel) renderMain(w, h int) string {
 	if m.loading {
-		return ui.PanelTitle.Render("✨ Loading") + "\n\n" + ui.Muted.Render(m.spinner.View()+" fetching quests…")
+		return ui.Gold.Render("◆ LOADING ◆") + "\n\n" + ui.Terminal.Render(m.spinner.View()+" fetching data...")
 	}
-	focus := m.focusTasks(3)
+
 	var out []string
-	out = append(out, ui.PanelTitle.Render("🎯 Focus"))
+
+	// Focus section (top tasks)
+	out = append(out, ui.Gold.Render("◆ FOCUS ◆"))
+	focus := m.focusTasks(3)
 	if len(focus) == 0 {
-		out = append(out, ui.Muted.Render("(no pending leaf tasks)"))
+		out = append(out, ui.TerminalDim.Render("  (no pending tasks)"))
 	} else {
 		for _, t := range focus {
-			icon := ui.KindIcon(t.IsProject, t.IsHabit)
-			out = append(out, fmt.Sprintf("%s #%d %s %s", icon, t.ID, t.Title, ui.Muted.Render(fmt.Sprintf("(+%d XP)", t.XPValue))))
+			icon := kindIconRetro(t.IsProject, t.IsHabit)
+			xpStr := ui.TerminalDim.Render(fmt.Sprintf("+%dXP", t.XPValue))
+			out = append(out, fmt.Sprintf("  %s #%d %s %s", icon, t.ID, truncate(t.Title, w-20), xpStr))
 		}
 	}
+
 	out = append(out, "")
-	out = append(out, ui.PanelTitle.Render("🗺️ Quest Log"))
+	out = append(out, ui.Gold.Render("◆ QUEST LOG ◆"))
 
 	lines := m.questLines()
 	if len(lines) == 0 {
-		out = append(out, "(empty)")
+		out = append(out, ui.TerminalDim.Render("  (empty)"))
 		return strings.Join(out, "\n")
 	}
-	for i, ql := range lines {
+
+	// Calculate visible lines based on height
+	maxVisible := h - len(out) - 2
+	if maxVisible < 5 {
+		maxVisible = 5
+	}
+
+	// Scrolling: ensure selected is visible
+	startIdx := 0
+	if m.selected >= maxVisible {
+		startIdx = m.selected - maxVisible + 1
+	}
+	endIdx := startIdx + maxVisible
+	if endIdx > len(lines) {
+		endIdx = len(lines)
+	}
+
+	// Show scroll indicator if needed
+	if startIdx > 0 {
+		out = append(out, ui.TerminalDim.Render("  ▲ more above ▲"))
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		ql := lines[i]
 		indent := strings.Repeat("  ", ql.depth)
-		kind := ui.KindIcon(ql.isProject, ql.isHabit)
+		icon := kindIconRetro(ql.isProject, ql.isHabit)
+
 		fold := "  "
 		if ql.hasChildren {
 			if ql.expanded {
@@ -383,22 +697,38 @@ func (m boardModel) renderMain() string {
 				fold = "▸ "
 			}
 		}
-		status := ui.StatusText(ql.status)
-		row := fmt.Sprintf("%s%s%s %s %s", indent, fold, kind, ql.title, ui.Muted.Render("("+status+")"))
+
+		statusIcon := statusIconRetro(ql.status)
+		title := truncate(ql.title, w-ql.depth*2-15)
+
+		row := fmt.Sprintf("%s%s%s %s %s", indent, fold, icon, title, statusIcon)
+
 		if i == m.selected {
+			// Highlight selected row
 			row = ui.SelectedRow.Render(row)
 		}
 		out = append(out, row)
 	}
+
+	if endIdx < len(lines) {
+		out = append(out, ui.TerminalDim.Render("  ▼ more below ▼"))
+	}
+
 	return strings.Join(out, "\n")
 }
 
-func (m boardModel) renderFooter() string {
-	line := ui.Muted.Render(m.lastLog)
+func (m boardModel) renderFooter(w int) string {
+	sep := ui.TerminalDim.Render(strings.Repeat("─", w))
+
+	// Status line in terminal style
+	var status string
 	if m.loading {
-		line = ui.Muted.Render(m.spinner.View()+" ") + line
+		status = ui.Terminal.Render(m.spinner.View()+" ") + ui.TerminalDim.Render(m.lastLog)
+	} else {
+		status = ui.Terminal.Render("> ") + ui.TerminalDim.Render(m.lastLog)
 	}
-	return line
+
+	return sep + "\n" + status
 }
 
 func (m boardModel) focusTasks(n int) []storage.Task {
@@ -450,6 +780,14 @@ func renderAttr(label string, xp int) string {
 	return fmt.Sprintf("%s %s %s", label, ui.Muted.Render(fmt.Sprintf("L%d", lvl)), bar)
 }
 
+func renderAttrRetro(icon, name string, xp, barW int) string {
+	lvl := engine.AttributeLevelForXP(xp)
+	cur := engine.XPRequiredForLevel(lvl)
+	next := engine.XPRequiredForLevel(lvl + 1)
+	bar := progressBarRetro(xp-cur, next-cur, barW)
+	return fmt.Sprintf("%s %s %s %s", icon, ui.TerminalDim.Render(fmt.Sprintf("%-4s", name)), ui.Terminal.Render(fmt.Sprintf("L%d", lvl)), bar)
+}
+
 func progressBarStyled(value int, total int, width int) string {
 	if total <= 0 {
 		total = 1
@@ -471,6 +809,131 @@ func progressBarStyled(value int, total int, width int) string {
 	fill := strings.Repeat("█", filled)
 	empty := strings.Repeat("░", width-filled)
 	return ui.Muted.Render("[") + ui.Good.Render(fill) + ui.Dim.Render(empty) + ui.Muted.Render("]")
+}
+
+func progressBarRetro(value int, total int, width int) string {
+	if total <= 0 {
+		total = 1
+	}
+	if width <= 2 {
+		width = 2
+	}
+	if value < 0 {
+		value = 0
+	}
+	if value > total {
+		value = total
+	}
+	ratio := float64(value) / float64(total)
+	filled := int(ratio * float64(width))
+	if filled > width {
+		filled = width
+	}
+	fill := strings.Repeat("▓", filled)
+	empty := strings.Repeat("░", width-filled)
+	return ui.Terminal.Render(fill) + ui.TerminalDim.Render(empty)
+}
+
+func kindIconRetro(isProject, isHabit bool) string {
+	if isProject {
+		return ui.Gold.Render("◈")
+	}
+	if isHabit {
+		return ui.Terminal.Render("○")
+	}
+	return ui.TerminalDim.Render("•")
+}
+
+func statusIconRetro(status string) string {
+	switch status {
+	case "done":
+		return ui.Terminal.Render("✓")
+	case "active":
+		return ui.Gold.Render("►")
+	case "planning":
+		return ui.TerminalDim.Render("…")
+	default:
+		return ui.TerminalDim.Render("·")
+	}
+}
+
+func truncate(s string, maxLen int) string {
+	if maxLen < 4 {
+		maxLen = 4
+	}
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
+
+// renderSparkGraph renders a spark line graph using block characters
+func renderSparkGraph(values []int, width int) string {
+	if len(values) == 0 {
+		return ui.TerminalDim.Render("(no data)")
+	}
+
+	// Find max value for scaling
+	maxVal := 1
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	// Spark characters from low to high
+	sparks := []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+	var result strings.Builder
+	for _, v := range values {
+		if v == 0 {
+			result.WriteString(ui.TerminalDim.Render("░"))
+		} else {
+			// Scale value to spark index (0-7)
+			idx := (v * 7) / maxVal
+			if idx > 7 {
+				idx = 7
+			}
+			result.WriteString(ui.Terminal.Render(string(sparks[idx])))
+		}
+	}
+	return result.String()
+}
+
+// renderBarGraph renders a horizontal bar graph
+func renderBarGraph(values []int, labels []string, width int) []string {
+	if len(values) == 0 {
+		return []string{ui.TerminalDim.Render("(no data)")}
+	}
+
+	maxVal := 1
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	barWidth := width - 8 // Leave room for label
+	if barWidth < 5 {
+		barWidth = 5
+	}
+
+	var lines []string
+	for i, v := range values {
+		label := ""
+		if i < len(labels) {
+			label = labels[i]
+		}
+
+		filled := 0
+		if maxVal > 0 {
+			filled = (v * barWidth) / maxVal
+		}
+
+		bar := strings.Repeat("▓", filled) + strings.Repeat("░", barWidth-filled)
+		lines = append(lines, fmt.Sprintf("%-3s %s", label, ui.Terminal.Render(bar)))
+	}
+	return lines
 }
 
 func findTask(tasks []storage.Task, id int64) *storage.Task {

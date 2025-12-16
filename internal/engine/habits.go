@@ -93,4 +93,5 @@ func GetHabitProgress(task *storage.Task, completions []storage.TaskCompletion, 
 		progress.Expired = true
 	}
 
-	return progress}
+	return progress
+}

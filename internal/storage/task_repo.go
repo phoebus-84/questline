@@ -184,6 +184,25 @@ func (r *TaskRepo) UpdateStatus(ctx context.Context, id int64, status string) er
 	return nil
 }
 
+func (r *TaskRepo) Delete(ctx context.Context, id int64) error {
+	// First delete any child tasks
+	_, err := r.db.ExecContext(ctx, `DELETE FROM tasks WHERE parent_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("task delete children: %w", err)
+	}
+	// Delete completions for this task
+	_, err = r.db.ExecContext(ctx, `DELETE FROM task_completions WHERE task_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("task delete completions: %w", err)
+	}
+	// Delete the task itself
+	_, err = r.db.ExecContext(ctx, `DELETE FROM tasks WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("task delete: %w", err)
+	}
+	return nil
+}
+
 func boolToInt(v bool) int {
 	if v {
 		return 1
