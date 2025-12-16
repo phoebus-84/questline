@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"questline/internal/engine"
 	"questline/internal/ui"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,15 @@ func newAcceptCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %s → created #%d\n", ui.Good.Render(ui.IconScroll+" Accepted"), ui.Muted.Render(code), res.TaskID)
+
+			// Show hint for projects without auto-spawned children
+			def := engine.GetBlueprintDef(code)
+			if def != nil && def.Kind == engine.BlueprintKindProject && len(def.Children) == 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s Add subtasks to activate: %s\n",
+					ui.Muted.Render("💡"),
+					ui.Key.Render(fmt.Sprintf("ql add -p %d \"First step\"", res.TaskID)))
+			}
+
 			return nil
 		},
 	}

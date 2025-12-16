@@ -9,13 +9,14 @@ import (
 type HabitInterval string
 
 const (
-	HabitIntervalDaily  HabitInterval = "daily"
-	HabitIntervalWeekly HabitInterval = "weekly"
+	HabitIntervalDaily   HabitInterval = "daily"
+	HabitIntervalWeekly  HabitInterval = "weekly"
+	HabitIntervalMonthly HabitInterval = "monthly"
 )
 
 func (h HabitInterval) IsValid() bool {
 	switch h {
-	case HabitIntervalDaily, HabitIntervalWeekly:
+	case HabitIntervalDaily, HabitIntervalWeekly, HabitIntervalMonthly:
 		return true
 	default:
 		return false
@@ -37,6 +38,8 @@ func NextDueDate(now time.Time, interval HabitInterval) (time.Time, error) {
 		return now.Add(24 * time.Hour), nil
 	case HabitIntervalWeekly:
 		return now.Add(7 * 24 * time.Hour), nil
+	case HabitIntervalMonthly:
+		return now.AddDate(0, 1, 0), nil
 	default:
 		return time.Time{}, fmt.Errorf("invalid habit interval: %q", interval)
 	}

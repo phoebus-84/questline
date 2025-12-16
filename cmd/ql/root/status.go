@@ -104,12 +104,11 @@ func newStatusCmd() *cobra.Command {
 				return err
 			}
 
-			statuses := []string{"available", "active", "completed", "locked"}
+			statuses := []string{"available", "active", "completed"}
 			titles := map[string]string{
 				"available": "Blueprints (available)",
 				"active":    "Blueprints (active)",
 				"completed": "Blueprints (completed)",
-				"locked":    "Blueprints (locked)",
 			}
 			for _, st := range statuses {
 				list, err := svc.BlueprintRepo().ListByStatus(ctx, st)
@@ -128,12 +127,15 @@ func newStatusCmd() *cobra.Command {
 					heading = "🟣 " + heading
 				case "completed":
 					heading = "🏁 " + heading
-				case "locked":
-					heading = "🔒 " + heading
 				}
 				fmt.Fprintln(cmd.OutOrStdout(), ui.H2.Render(heading+":"))
 				for i := range list {
-					fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", ui.Muted.Render(list[i].Code))
+					def := engine.GetBlueprintDef(list[i].Code)
+					if def != nil && def.Description != "" {
+						fmt.Fprintf(cmd.OutOrStdout(), "- %s: %s\n", ui.Key.Render(list[i].Code), ui.Muted.Render(def.Description))
+					} else {
+						fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", ui.Muted.Render(list[i].Code))
+					}
 				}
 				fmt.Fprintln(cmd.OutOrStdout(), "")
 			}
